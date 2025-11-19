@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Local storage key for persistence
 const STORAGE_KEY = 'tournament_state_v1';
@@ -74,9 +74,11 @@ export default function TournamentGenerator() {
     }
   }, []);
 
-  // Persist relevant state whenever it changes
+  // Debounced persist: save to localStorage 500ms after last change
+  const saveTimeoutRef = useRef(null);
+
   useEffect(() => {
-    const stateToSave = {
+    const stateToSave = () => ({
       step,
       numPlayers,
       numFields,
@@ -91,8 +93,48 @@ export default function TournamentGenerator() {
       pointsLoss,
       pointsPerGoal,
       returnStep
+    });
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveStateToStorage(stateToSave());
+      saveTimeoutRef.current = null;
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
     };
-    saveStateToStorage(stateToSave);
+  }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
+
+  // Ensure state is flushed on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      saveStateToStorage({
+        step,
+        numPlayers,
+        numFields,
+        playersPerTeam,
+        numRounds,
+        playerNames,
+        matches,
+        results,
+        finalStandings,
+        pointsWin,
+        pointsDraw,
+        pointsLoss,
+        pointsPerGoal,
+        returnStep
+      });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
 
   useEffect(() => {
