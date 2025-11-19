@@ -171,8 +171,8 @@ export default function TournamentGenerator() {
       parsedNumPlayers && parsedPlayersPerTeam && parsedNumFields &&
       !isNaN(parsedNumPlayers) && !isNaN(parsedPlayersPerTeam) && !isNaN(parsedNumFields)
     ) {
-      const playersPerMatch = playersPerTeam * 2;
-      const playersPerRound = numFields * playersPerMatch;
+      const playersPerMatch = parsedPlayersPerTeam * 2;
+      const playersPerRound = parsedNumFields * playersPerMatch;
       if (playersPerRound >= parsedNumPlayers) {
         setSuggestedRounds("dowolna");
         // Only set default numRounds if the user hasn't typed any value yet
@@ -761,11 +761,15 @@ export default function TournamentGenerator() {
                       const extra = totalSlots % numPlayers;
                       // Rozdziel "nadmiarowe" sloty na pierwszych extra zawodników
                       const playerTotal = idx < extra ? base + 1 : base;
-                      // Rozkład na rundy: najprościej, jeśli slotów na zawodnika == liczba rund, 1 na rundę
-                      // W praktyce, rozkładamy "1" w tylu rundach ile meczów ma zagrać
+                      // Rozkład na rundy: rozkładamy mecze gracza w kolejnych rundach,
+                      // przesuwając startową rundę o indeks zawodnika (offset). Dzięki temu
+                      // kolejne osoby nie będą miały identycznego wzoru i każda runda
+                      // otrzyma przydziały — unikamy sytuacji, gdzie konkretna runda
+                      // miałaby 0 graczy.
                       let roundArr = Array(numRounds).fill(0);
                       for (let i = 0; i < playerTotal; i++) {
-                        roundArr[i % numRounds] += 1;
+                        const roundIndex = (i + idx) % numRounds;
+                        roundArr[roundIndex] += 1;
                       }
                       return (
                         <tr key={name}>
