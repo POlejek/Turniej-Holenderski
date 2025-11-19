@@ -199,115 +199,107 @@ export default function TournamentGenerator() {
   };
 
   const generateTournament = () => {
+    // New scheduling algorithm: fill each round and field by selecting players
+    // with the lowest match counts and preventing a player from playing more
+    // than once in the same round. This balances matches across players.
     const allMatches = [];
     const playerMatchCount = {};
     const playerTeammates = {};
-    
+
     playerNames.forEach(name => {
       playerMatchCount[name] = 0;
       playerTeammates[name] = new Set();
     });
 
     const playersPerMatch = playersPerTeam * 2;
-    const playersPerRound = numFields * playersPerMatch;
-    const totalSlots = numRounds * playersPerRound;
-    const matchesPerPlayer = totalSlots / numPlayers;
+    const matchesPerPlayer = (numRounds * numFields * playersPerMatch) / numPlayers;
 
     for (let round = 0; round < numRounds; round++) {
-      const roundMatches = [];
-      
-      let availablePlayers = [...playerNames].filter(name => 
-        playerMatchCount[name] < matchesPerPlayer
-      );
-      
-      if (availablePlayers.length < playersPerRound) {
-        availablePlayers = [...playerNames];
-      }
-      
-      availablePlayers.sort((a, b) => playerMatchCount[a] - playerMatchCount[b]);
-      
-      const grouped = {};
-      availablePlayers.forEach(player => {
-        const count = playerMatchCount[player];
-        if (!grouped[count]) grouped[count] = [];
-        grouped[count].push(player);
-      });
-      
-      availablePlayers = [];
-      Object.keys(grouped).sort((a, b) => a - b).forEach(count => {
-        availablePlayers.push(...shuffle(grouped[count]));
-      });
-      
+      const playersAssignedThisRound = new Set();
+
       for (let field = 0; field < numFields; field++) {
-        if (availablePlayers.length >= playersPerTeam * 2) {
-          const team1 = [];
-          const team2 = [];
-          
-          for (let i = 0; i < playersPerTeam && availablePlayers.length > 0; i++) {
-            let bestPlayerIdx = 0;
-            let minSharedGames = Infinity;
-            
-            for (let j = 0; j < Math.min(5, availablePlayers.length); j++) {
-              const player = availablePlayers[j];
-              const sharedGames = team1.filter(t => playerTeammates[player]?.has(t)).length;
-              if (sharedGames < minSharedGames) {
-                minSharedGames = sharedGames;
-                bestPlayerIdx = j;
-              }
-            }
-            
-            const player = availablePlayers.splice(bestPlayerIdx, 1)[0];
-            team1.push(player);
-          }
-          
-          for (let i = 0; i < playersPerTeam && availablePlayers.length > 0; i++) {
-            let bestPlayerIdx = 0;
-            let minSharedGames = Infinity;
-            
-            for (let j = 0; j < Math.min(5, availablePlayers.length); j++) {
-              const player = availablePlayers[j];
-              const sharedGames = team2.filter(t => playerTeammates[player]?.has(t)).length;
-              if (sharedGames < minSharedGames) {
-                minSharedGames = sharedGames;
-                bestPlayerIdx = j;
-              }
-            }
-            
-            const player = availablePlayers.splice(bestPlayerIdx, 1)[0];
-            team2.push(player);
-          }
-          
-          [...team1, ...team2].forEach(player => {
-            playerMatchCount[player]++;
-          });
-          
-          team1.forEach(p1 => {
-            team1.forEach(p2 => {
-              if (p1 !== p2) playerTeammates[p1].add(p2);
-            });
-          });
-          
-          team2.forEach(p1 => {
-            team2.forEach(p2 => {
-              if (p1 !== p2) playerTeammates[p1].add(p2);
-            });
-          });
-          
-          roundMatches.push({
-            id: `r${round + 1}f${field + 1}`,
-            round: round + 1,
-            field: field + 1,
-            team1,
-            team2,
-            score1: 0,
-            score2: 0
-          });
+        // Build candidate pool: players not assigned this round, preferring lowest match count
+        const candidates = playerNames
+          .filter(p => !playersAssignedThisRound.has(p))
+          .sort((a, b) => playerMatchCount[a] - playerMatchCount[b]);
+
+        // If not enough candidates to fill a match, still use lowest-count players
+        if (candidates.length < playersPerMatch) {
+          // In rare cases, allow selecting from all players not already in this match
+          // (but still avoid players already assigned in this round)
+          // This should be uncommon when matchesPerPlayer is integer.
         }
+
+        const pickPlayerForTeam = (team, pool) => {
+          // choose player from pool minimizing prior teammate overlap
+          let bestIdx = 0;
+          let bestScore = Infinity;
+          const lookahead = Math.min(8, pool.length);
+          for (let j = 0; j < lookahead; j++) {
+            const candidate = pool[j];
+            const shared = team.filter(t => playerTeammates[candidate]?.has(t)).length;
+            if (shared < bestScore) {
+              bestScore = shared;
+              bestIdx = j;
+            }
+          }
+          return pool.splice(bestIdx, 1)[0];
+        };
+
+        const pool = [...candidates];
+        const team1 = [];
+        const team2 = [];
+
+        for (let i = 0; i < playersPerTeam; i++) {
+          if (pool.length === 0) break;
+          const p = pickPlayerForTeam(team1, pool);
+          team1.push(p);
+        }
+        for (let i = 0; i < playersPerTeam; i++) {
+          if (pool.length === 0) break;
+          const p = pickPlayerForTeam(team2, pool);
+          team2.push(p);
+        }
+
+        // If we couldn't fill teams from candidates (rare), fill from remaining players
+        if (team1.length + team2.length < playersPerMatch) {
+          const remaining = playerNames.filter(p => !playersAssignedThisRound.has(p) && !team1.includes(p) && !team2.includes(p));
+          while (team1.length + team2.length < playersPerMatch && remaining.length > 0) {
+            // pick lowest match count among remaining
+            remaining.sort((a, b) => playerMatchCount[a] - playerMatchCount[b]);
+            const pick = remaining.shift();
+            if (team1.length < playersPerTeam) team1.push(pick);
+            else team2.push(pick);
+          }
+        }
+
+        // Final check: if still not enough players to form full match, skip this field
+        if (team1.length !== playersPerTeam || team2.length !== playersPerTeam) {
+          continue;
+        }
+
+        // Mark players as assigned for this round and increment counts
+        [...team1, ...team2].forEach(p => {
+          playersAssignedThisRound.add(p);
+          playerMatchCount[p] = (playerMatchCount[p] || 0) + 1;
+        });
+
+        // Update teammates sets
+        team1.forEach(p1 => team1.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+        team2.forEach(p1 => team2.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+
+        allMatches.push({
+          id: `r${round + 1}f${field + 1}`,
+          round: round + 1,
+          field: field + 1,
+          team1,
+          team2,
+          score1: 0,
+          score2: 0
+        });
       }
-      
-      allMatches.push(...roundMatches);
     }
-    
+
     setMatches(allMatches);
     const initialResults = {};
     allMatches.forEach(match => {
