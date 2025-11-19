@@ -150,29 +150,46 @@ export default function TournamentGenerator() {
   useEffect(() => { setPlayersPerTeamInput(playersPerTeam === '' ? '' : String(playersPerTeam)); }, [playersPerTeam]);
   useEffect(() => { setNumRoundsInput(numRounds === '' ? '' : String(numRounds)); }, [numRounds]);
 
+  // Validation flags for inputs — only used for UI highlighting while typing
+  const parsedNumPlayersInput = numPlayersInput === '' ? NaN : parseInt(numPlayersInput);
+  const parsedNumFieldsInput = numFieldsInput === '' ? NaN : parseInt(numFieldsInput);
+  const parsedPlayersPerTeamInput = playersPerTeamInput === '' ? NaN : parseInt(playersPerTeamInput);
+  const parsedNumRoundsInput = numRoundsInput === '' ? NaN : parseInt(numRoundsInput);
+
+  const numPlayersInvalid = numPlayersInput !== '' && (isNaN(parsedNumPlayersInput) || parsedNumPlayersInput < 4);
+  const numFieldsInvalid = numFieldsInput !== '' && (isNaN(parsedNumFieldsInput) || parsedNumFieldsInput < 1);
+  const playersPerTeamInvalid = playersPerTeamInput !== '' && (isNaN(parsedPlayersPerTeamInput) || parsedPlayersPerTeamInput < 1);
+  const numRoundsInvalid = numRoundsInput !== '' && (isNaN(parsedNumRoundsInput) || parsedNumRoundsInput < 1);
+
   useEffect(() => {
+    // Use parsed input values while user types so suggested rounds update
+    const parsedNumPlayers = numPlayersInput === '' ? numPlayers : parseInt(numPlayersInput);
+    const parsedPlayersPerTeam = playersPerTeamInput === '' ? playersPerTeam : parseInt(playersPerTeamInput);
+    const parsedNumFields = numFieldsInput === '' ? numFields : parseInt(numFieldsInput);
+
     if (
-      numPlayers && playersPerTeam && numFields &&
-      !isNaN(numPlayers) && !isNaN(playersPerTeam) && !isNaN(numFields)
+      parsedNumPlayers && parsedPlayersPerTeam && parsedNumFields &&
+      !isNaN(parsedNumPlayers) && !isNaN(parsedPlayersPerTeam) && !isNaN(parsedNumFields)
     ) {
       const playersPerMatch = playersPerTeam * 2;
       const playersPerRound = numFields * playersPerMatch;
-      if (playersPerRound >= numPlayers) {
+      if (playersPerRound >= parsedNumPlayers) {
         setSuggestedRounds("dowolna");
-        setNumRounds(3);
+        // Only set default numRounds if the user hasn't typed any value yet
+        if (numRoundsInput === '') setNumRounds(3);
       } else {
         const suggestions = [];
         for (let rounds = 1; rounds <= 20 && suggestions.length < 5; rounds++) {
           const totalSlots = rounds * playersPerRound;
-          if (totalSlots % numPlayers === 0) {
+          if (totalSlots % parsedNumPlayers === 0) {
             suggestions.push(rounds);
           }
         }
         setSuggestedRounds(suggestions.length > 0 ? suggestions.join(', ') : []);
-        setNumRounds(suggestions.length > 0 ? suggestions[0] : 1);
+        if (numRoundsInput === '') setNumRounds(suggestions.length > 0 ? suggestions[0] : 1);
       }
     }
-  }, [numPlayers, playersPerTeam, numFields]);
+  }, [numPlayersInput, playersPerTeamInput, numFieldsInput]);
 
   const initializePlayers = () => {
     const names = Array(numPlayers).fill('').map((_, i) => `Zawodnik ${i + 1}`);
@@ -491,11 +508,17 @@ export default function TournamentGenerator() {
                   onChange={e => {
                     const val = e.target.value;
                     setNumPlayersInput(val);
-                    if (val === '') setNumPlayers('');
-                    else setNumPlayers(Math.max(4, parseInt(val) || 0));
+                    // allow user to type any number; highlight if invalid but don't change state
+                    if (val === '') {
+                      // keep typed input for editing
+                    }
+                    setInputError('');
                   }}
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numPlayersInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
+                {numPlayersInvalid && (
+                  <div className="text-red-600 text-sm mt-1">Minimalna liczba zawodników to 4</div>
+                )}
               </div>
 
               <div>
@@ -509,11 +532,13 @@ export default function TournamentGenerator() {
                   onChange={e => {
                     const val = e.target.value;
                     setNumFieldsInput(val);
-                    if (val === '') setNumFields('');
-                    else setNumFields(Math.max(1, parseInt(val) || 0));
+                    setInputError('');
                   }}
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numFieldsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
+                {numFieldsInvalid && (
+                  <div className="text-red-600 text-sm mt-1">Minimalna liczba boisk to 1</div>
+                )}
               </div>
 
               <div>
@@ -527,11 +552,13 @@ export default function TournamentGenerator() {
                   onChange={e => {
                     const val = e.target.value;
                     setPlayersPerTeamInput(val);
-                    if (val === '') setPlayersPerTeam('');
-                    else setPlayersPerTeam(Math.max(1, parseInt(val) || 0));
+                    setInputError('');
                   }}
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${playersPerTeamInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
+                {playersPerTeamInvalid && (
+                  <div className="text-red-600 text-sm mt-1">Minimalna liczba zawodników w drużynie to 1</div>
+                )}
               </div>
 
               <div>
@@ -548,11 +575,13 @@ export default function TournamentGenerator() {
                   onChange={e => {
                     const val = e.target.value;
                     setNumRoundsInput(val);
-                    if (val === '') setNumRounds('');
-                    else setNumRounds(Math.max(1, parseInt(val) || 0));
+                    setInputError('');
                   }}
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numRoundsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
+                {numRoundsInvalid && (
+                  <div className="text-red-600 text-sm mt-1">Liczba rund musi być większa lub równa 1</div>
+                )}
               </div>
 
               <div className="border-t pt-4 sm:pt-6">
