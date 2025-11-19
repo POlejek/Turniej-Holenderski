@@ -1,46 +1,18 @@
 import React, { useState, useEffect } from 'react';
 
-// Improved colored SVG components (simple, self-contained)
+// Simplified logo and small inline icons (use emoji/text for lightweight UI)
 const Logo = ({ className = '' }) => (
-  <div className={`flex items-center gap-2 sm:gap-3 ${className}`}>
-    <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
-      <div style={{ width: '100%', position: 'relative', paddingTop: '100%' }}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#6366f1,#ec4899)' }}>
-          <svg style={{ width: '60%', height: '60%' }} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white" opacity="0.95" />
-          </svg>
-        </div>
-      </div>
-    </div>
+  <div className={`flex items-center gap-3 ${className}`}>
+    <div className="text-2xl sm:text-3xl">⭐</div>
     <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">Generator Turnieju</h1>
   </div>
 );
 
-const IconButtonSvg = ({ children, className = '' }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    {children}
-  </svg>
-);
-
-const Users = (props) => (
-  <IconButtonSvg {...props}><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-4 0-8 2-8 6v1h16v-1c0-4-4-6-8-6z" /></IconButtonSvg>
-);
-
-const Trophy = (props) => (
-  <IconButtonSvg {...props}><path d="M6 3h12v2a3 3 0 01-3 3h-6A3 3 0 016 5V3zm3 12h6v2H9v-2zM5 5a2 2 0 00-2 2v1a4 4 0 004 4h10a4 4 0 004-4V7a2 2 0 00-2-2" /></IconButtonSvg>
-);
-
-const Play = (props) => (
-  <IconButtonSvg {...props}><path d="M5 3v18l15-9L5 3z" /></IconButtonSvg>
-);
-
-const RefreshCw = (props) => (
-  <IconButtonSvg {...props}><path d="M21 12a9 9 0 11-3.22-6.73L21 6v6zM3 12a9 9 0 003.22 6.73L3 18V12z" /></IconButtonSvg>
-);
-
-const Download = (props) => (
-  <IconButtonSvg {...props}><path d="M12 3v12l4-4m-4 4L8 11M21 21H3" /></IconButtonSvg>
-);
+const Users = ({ className = '' }) => <span className={className}>👥</span>;
+const Trophy = ({ className = '' }) => <span className={className}>🏆</span>;
+const Play = ({ className = '' }) => <span className={className}>▶️</span>;
+const RefreshCw = ({ className = '' }) => <span className={className}>🔄</span>;
+const Download = ({ className = '' }) => <span className={className}>⬇️</span>;
 
 export default function TournamentGenerator() {
   const [step, setStep] = useState(1);
@@ -54,6 +26,10 @@ export default function TournamentGenerator() {
   const [results, setResults] = useState({});
   const [finalStandings, setFinalStandings] = useState([]);
   const [returnStep, setReturnStep] = useState(null);
+  const [pointsWin, setPointsWin] = useState(10);
+  const [pointsDraw, setPointsDraw] = useState(5);
+  const [pointsLoss, setPointsLoss] = useState(0);
+  const [pointsPerGoal, setPointsPerGoal] = useState(1);
 
   useEffect(() => {
     if (numPlayers > 0 && playersPerTeam > 0 && numFields > 0) {
@@ -273,13 +249,17 @@ export default function TournamentGenerator() {
         
         if (score1 > score2) {
           standings[player].wins++;
-          standings[player].points += 3;
+          standings[player].points += pointsWin;
         } else if (score1 === score2) {
           standings[player].draws++;
-          standings[player].points += 1;
+          standings[player].points += pointsDraw;
         } else {
           standings[player].losses++;
+          standings[player].points += pointsLoss;
         }
+        
+        // Dodaj punkty za bramki
+        standings[player].points += score1 * pointsPerGoal;
       });
       
       match.team2.forEach(player => {
@@ -289,13 +269,17 @@ export default function TournamentGenerator() {
         
         if (score2 > score1) {
           standings[player].wins++;
-          standings[player].points += 3;
+          standings[player].points += pointsWin;
         } else if (score1 === score2) {
           standings[player].draws++;
-          standings[player].points += 1;
+          standings[player].points += pointsDraw;
         } else {
           standings[player].losses++;
+          standings[player].points += pointsLoss;
         }
+        
+        // Dodaj punkty za bramki
+        standings[player].points += score2 * pointsPerGoal;
       });
     });
 
@@ -320,7 +304,14 @@ export default function TournamentGenerator() {
     csv += `Boiska;${numFields}\n`;
     csv += `Zawodników na drużynę;${playersPerTeam}\n`;
     csv += `Rundy;${numRounds}\n`;
-    csv += `Łącznie meczy;${matches.length}\n\n`;
+    csv += `Łącznie meczy;${matches.length}\n`;
+    csv += `\n`;
+    csv += `PUNKTACJA\n`;
+    csv += `Wygrana;${pointsWin} pkt\n`;
+    csv += `Remis;${pointsDraw} pkt\n`;
+    csv += `Przegrana;${pointsLoss} pkt\n`;
+    csv += `Bramka;${pointsPerGoal} pkt\n`;
+    csv += `\n`;
     
     csv += 'MECZE\n';
     csv += 'Runda;Boisko;Drużyna 1;Wynik;Drużyna 2\n';
@@ -342,7 +333,7 @@ export default function TournamentGenerator() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'turniej-wyniki.csv';
+    a.download = `turniej-wyniki-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -410,6 +401,64 @@ export default function TournamentGenerator() {
                   onChange={(e) => setNumRounds(parseInt(e.target.value) || 1)}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
+              </div>
+
+              <div className="border-t pt-4 sm:pt-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">Punktacja</h3>
+                
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                      Punkty za wygraną
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pointsWin}
+                      onChange={(e) => setPointsWin(parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                      Punkty za remis
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pointsDraw}
+                      onChange={(e) => setPointsDraw(parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                      Punkty za przegraną
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pointsLoss}
+                      onChange={(e) => setPointsLoss(parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                      Punkty za bramkę
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pointsPerGoal}
+                      onChange={(e) => setPointsPerGoal(parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
               </div>
 
               <button
@@ -484,6 +533,10 @@ export default function TournamentGenerator() {
                 <p><strong>Zawodników na drużynę:</strong> {playersPerTeam}</p>
                 <p><strong>Rund:</strong> {numRounds}</p>
                 <p><strong>Łącznie meczy:</strong> {numRounds * numFields}</p>
+                <div className="border-t pt-2 mt-3">
+                  <p className="font-semibold mb-1">Punktacja:</p>
+                  <p className="text-xs sm:text-sm">Wygrana: {pointsWin} pkt | Remis: {pointsDraw} pkt | Przegrana: {pointsLoss} pkt | Bramka: {pointsPerGoal} pkt</p>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3">
