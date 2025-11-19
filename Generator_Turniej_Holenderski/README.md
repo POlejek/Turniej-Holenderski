@@ -43,6 +43,28 @@ export default defineConfig([
 ])
 ```
 
+## Deployment
+
+This project is configured to deploy to GitHub Pages.
+
+- The `homepage` field in `package.json` is set to: `https://POlejek.github.io/Turniej-Holenderski/`.
+- Vite `base` path is configured in `vite.config.ts` to `/Turniej-Holenderski/`.
+
+Local deploy (one-time):
+
+```bash
+npm ci
+npm run build
+npm run deploy
+```
+
+Continuous deployment via GitHub Actions:
+
+- A GitHub Action workflow `./github/workflows/gh-pages.yml` is already added to build the project and publish `dist/` to the `gh-pages` branch whenever `main` is pushed.
+- The workflow uses the default `GITHUB_TOKEN`; no additional secrets are required.
+
+If you prefer Netlify or Vercel, remove the `base` configuration from `vite.config.ts`, and use their config UI to deploy from the `main` branch.
+
 You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js
