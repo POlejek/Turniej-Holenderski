@@ -42,6 +42,13 @@ export default function TournamentGenerator() {
   const [numFields, setNumFields] = useState(2);
   const [playersPerTeam, setPlayersPerTeam] = useState(2);
   const [numRounds, setNumRounds] = useState(0);
+
+  // For input fields: allow empty string for controlled input
+  const [numPlayersInput, setNumPlayersInput] = useState('8');
+  const [numFieldsInput, setNumFieldsInput] = useState('2');
+  const [playersPerTeamInput, setPlayersPerTeamInput] = useState('2');
+  const [numRoundsInput, setNumRoundsInput] = useState('0');
+  const [inputError, setInputError] = useState('');
   const [suggestedRounds, setSuggestedRounds] = useState(0);
   const [playerNames, setPlayerNames] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -137,11 +144,19 @@ export default function TournamentGenerator() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
 
+  // Synchronize input fields with state
+  useEffect(() => { setNumPlayersInput(numPlayers === '' ? '' : String(numPlayers)); }, [numPlayers]);
+  useEffect(() => { setNumFieldsInput(numFields === '' ? '' : String(numFields)); }, [numFields]);
+  useEffect(() => { setPlayersPerTeamInput(playersPerTeam === '' ? '' : String(playersPerTeam)); }, [playersPerTeam]);
+  useEffect(() => { setNumRoundsInput(numRounds === '' ? '' : String(numRounds)); }, [numRounds]);
+
   useEffect(() => {
-    if (numPlayers > 0 && playersPerTeam > 0 && numFields > 0) {
+    if (
+      numPlayers && playersPerTeam && numFields &&
+      !isNaN(numPlayers) && !isNaN(playersPerTeam) && !isNaN(numFields)
+    ) {
       const playersPerMatch = playersPerTeam * 2;
       const playersPerRound = numFields * playersPerMatch;
-      
       if (playersPerRound >= numPlayers) {
         setSuggestedRounds("dowolna");
         setNumRounds(3);
@@ -436,6 +451,25 @@ export default function TournamentGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  const calculateRounds = () => {
+    const rounds = [];
+    for (let i = 0; i < numRounds; i++) {
+      rounds.push([]);
+    }
+
+    for (let i = 0; i < numPlayers; i++) {
+      const roundIndex = i % numRounds;
+      rounds[roundIndex].push(`Zawodnik ${i + 1}`);
+    }
+
+    return rounds;
+  };
+
+  const handleStartTournament = () => {
+    const rounds = calculateRounds();
+    setMatches(rounds);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 sm:p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
@@ -453,8 +487,13 @@ export default function TournamentGenerator() {
                 <input
                   type="number"
                   min="4"
-                  value={numPlayers}
-                  onChange={(e) => setNumPlayers(parseInt(e.target.value) || 4)}
+                  value={numPlayersInput}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNumPlayersInput(val);
+                    if (val === '') setNumPlayers('');
+                    else setNumPlayers(Math.max(4, parseInt(val) || 0));
+                  }}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
@@ -466,8 +505,13 @@ export default function TournamentGenerator() {
                 <input
                   type="number"
                   min="1"
-                  value={numFields}
-                  onChange={(e) => setNumFields(parseInt(e.target.value) || 1)}
+                  value={numFieldsInput}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNumFieldsInput(val);
+                    if (val === '') setNumFields('');
+                    else setNumFields(Math.max(1, parseInt(val) || 0));
+                  }}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
@@ -479,8 +523,13 @@ export default function TournamentGenerator() {
                 <input
                   type="number"
                   min="1"
-                  value={playersPerTeam}
-                  onChange={(e) => setPlayersPerTeam(parseInt(e.target.value) || 1)}
+                  value={playersPerTeamInput}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setPlayersPerTeamInput(val);
+                    if (val === '') setPlayersPerTeam('');
+                    else setPlayersPerTeam(Math.max(1, parseInt(val) || 0));
+                  }}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
@@ -495,15 +544,19 @@ export default function TournamentGenerator() {
                 <input
                   type="number"
                   min="1"
-                  value={numRounds}
-                  onChange={(e) => setNumRounds(parseInt(e.target.value) || 1)}
+                  value={numRoundsInput}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNumRoundsInput(val);
+                    if (val === '') setNumRounds('');
+                    else setNumRounds(Math.max(1, parseInt(val) || 0));
+                  }}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
 
               <div className="border-t pt-4 sm:pt-6">
                 <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">Punktacja</h3>
-                
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
@@ -517,7 +570,6 @@ export default function TournamentGenerator() {
                       className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                       Punkty za remis
@@ -530,7 +582,6 @@ export default function TournamentGenerator() {
                       className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                       Punkty za przegraną
@@ -543,7 +594,6 @@ export default function TournamentGenerator() {
                       className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                       Punkty za bramkę
@@ -559,8 +609,27 @@ export default function TournamentGenerator() {
                 </div>
               </div>
 
+              {inputError && (
+                <div className="text-red-600 text-sm font-medium mt-2">{inputError}</div>
+              )}
+
               <button
                 onClick={() => {
+                  // Validate all fields before proceeding
+                  if (
+                    !numPlayersInput || isNaN(parseInt(numPlayersInput)) || parseInt(numPlayersInput) < 4 ||
+                    !numFieldsInput || isNaN(parseInt(numFieldsInput)) || parseInt(numFieldsInput) < 1 ||
+                    !playersPerTeamInput || isNaN(parseInt(playersPerTeamInput)) || parseInt(playersPerTeamInput) < 1 ||
+                    !numRoundsInput || isNaN(parseInt(numRoundsInput)) || parseInt(numRoundsInput) < 1
+                  ) {
+                    setInputError('Uzupełnij poprawnie wszystkie pola liczbowe.');
+                    return;
+                  }
+                  setInputError('');
+                  setNumPlayers(parseInt(numPlayersInput));
+                  setNumFields(parseInt(numFieldsInput));
+                  setPlayersPerTeam(parseInt(playersPerTeamInput));
+                  setNumRounds(parseInt(numRoundsInput));
                   initializePlayers();
                   setStep(2);
                 }}
@@ -624,7 +693,6 @@ export default function TournamentGenerator() {
           {step === 3 && (
             <div className="space-y-4 sm:space-y-6">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Podsumowanie turnieju</h2>
-              
               <div className="bg-gray-50 rounded-lg p-4 sm:p-6 space-y-2 sm:space-y-3 text-sm sm:text-base">
                 <p><strong>Zawodników:</strong> {numPlayers}</p>
                 <p><strong>Boisk:</strong> {numFields}</p>
@@ -635,6 +703,48 @@ export default function TournamentGenerator() {
                   <p className="font-semibold mb-1">Punktacja:</p>
                   <p className="text-xs sm:text-sm">Wygrana: {pointsWin} pkt | Remis: {pointsDraw} pkt | Przegrana: {pointsLoss} pkt | Bramka: {pointsPerGoal} pkt</p>
                 </div>
+              </div>
+
+              {/* Matryca meczów */}
+              <div className="overflow-x-auto bg-white rounded-lg shadow border my-4">
+                <table className="min-w-full text-xs sm:text-sm">
+                  <thead>
+                    <tr>
+                      <th className="px-2 py-2 border-b bg-gray-50 text-left">Zawodnik</th>
+                      {Array.from({ length: numRounds }).map((_, r) => (
+                        <th key={r} className="px-2 py-2 border-b bg-gray-50 text-center">R{r + 1}</th>
+                      ))}
+                      <th className="px-2 py-2 border-b bg-gray-50 text-center">Suma</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playerNames.map((name, idx) => {
+                      // Oblicz ile meczów dany zawodnik zagra w każdej rundzie (0 lub 1)
+                      // Rozkładamy mecze "równo" na podstawie round-robin, bez generowania faktycznych drużyn
+                      // Algorytm: rozdziel sloty meczowe na zawodników po kolei
+                      const totalSlots = numRounds * numFields * playersPerTeam * 2;
+                      const base = Math.floor(totalSlots / numPlayers);
+                      const extra = totalSlots % numPlayers;
+                      // Rozdziel "nadmiarowe" sloty na pierwszych extra zawodników
+                      const playerTotal = idx < extra ? base + 1 : base;
+                      // Rozkład na rundy: najprościej, jeśli slotów na zawodnika == liczba rund, 1 na rundę
+                      // W praktyce, rozkładamy "1" w tylu rundach ile meczów ma zagrać
+                      let roundArr = Array(numRounds).fill(0);
+                      for (let i = 0; i < playerTotal; i++) {
+                        roundArr[i % numRounds] += 1;
+                      }
+                      return (
+                        <tr key={name}>
+                          <td className="px-2 py-1 border-b font-medium whitespace-nowrap">{name}</td>
+                          {roundArr.map((val, r) => (
+                            <td key={r} className="px-2 py-1 border-b text-center">{val}</td>
+                          ))}
+                          <td className="px-2 py-1 border-b text-center font-bold">{playerTotal}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
               <div className="flex flex-col gap-3">
