@@ -1,5 +1,13 @@
 name: Deploy to GitHub Pages
 
+# Give the GITHUB_TOKEN permission to write pages and contents so the workflow
+# can push the generated files to the `gh-pages` branch. Some orgs/repositories
+# restrict the default token to read-only; add these permissions to allow publish.
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 on:
   push:
     branches:
