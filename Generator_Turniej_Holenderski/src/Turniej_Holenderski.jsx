@@ -502,18 +502,17 @@ export default function TournamentGenerator() {
                   Liczba zawodników
                 </label>
                 <input
-                  type="number"
-                  min="4"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={numPlayersInput}
                   onChange={e => {
                     const val = e.target.value;
                     setNumPlayersInput(val);
                     // allow user to type any number; highlight if invalid but don't change state
-                    if (val === '') {
-                      // keep typed input for editing
-                    }
                     setInputError('');
                   }}
+                  aria-invalid={numPlayersInvalid}
                   className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numPlayersInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {numPlayersInvalid && (
@@ -526,14 +525,16 @@ export default function TournamentGenerator() {
                   Liczba boisk
                 </label>
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={numFieldsInput}
                   onChange={e => {
                     const val = e.target.value;
                     setNumFieldsInput(val);
                     setInputError('');
                   }}
+                  aria-invalid={numFieldsInvalid}
                   className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numFieldsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {numFieldsInvalid && (
@@ -546,14 +547,16 @@ export default function TournamentGenerator() {
                   Zawodników na drużynę
                 </label>
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={playersPerTeamInput}
                   onChange={e => {
                     const val = e.target.value;
                     setPlayersPerTeamInput(val);
                     setInputError('');
                   }}
+                  aria-invalid={playersPerTeamInvalid}
                   className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${playersPerTeamInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {playersPerTeamInvalid && (
@@ -569,14 +572,16 @@ export default function TournamentGenerator() {
                   </span>
                 </label>
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={numRoundsInput}
                   onChange={e => {
                     const val = e.target.value;
                     setNumRoundsInput(val);
                     setInputError('');
                   }}
+                  aria-invalid={numRoundsInvalid}
                   className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numRoundsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {numRoundsInvalid && (
