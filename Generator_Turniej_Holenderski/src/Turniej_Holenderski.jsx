@@ -1,5 +1,27 @@
 import React, { useState, useEffect } from 'react';
 
+// Local storage key for persistence
+const STORAGE_KEY = 'tournament_state_v1';
+
+const loadStateFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn('Failed to load state from storage', e);
+    return null;
+  }
+};
+
+const saveStateToStorage = (state) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('Failed to save state to storage', e);
+  }
+};
+
 // Simplified logo and small inline icons (use emoji/text for lightweight UI)
 const Logo = ({ className = '' }) => (
   <div className={`flex items-center gap-3 ${className}`}>
@@ -30,6 +52,48 @@ export default function TournamentGenerator() {
   const [pointsDraw, setPointsDraw] = useState(5);
   const [pointsLoss, setPointsLoss] = useState(0);
   const [pointsPerGoal, setPointsPerGoal] = useState(1);
+
+  // Load persisted state on mount
+  useEffect(() => {
+    const saved = loadStateFromStorage();
+    if (saved) {
+      if (typeof saved.step === 'number') setStep(saved.step);
+      if (typeof saved.numPlayers === 'number') setNumPlayers(saved.numPlayers);
+      if (typeof saved.numFields === 'number') setNumFields(saved.numFields);
+      if (typeof saved.playersPerTeam === 'number') setPlayersPerTeam(saved.playersPerTeam);
+      if (typeof saved.numRounds === 'number') setNumRounds(saved.numRounds);
+      if (Array.isArray(saved.playerNames)) setPlayerNames(saved.playerNames);
+      if (Array.isArray(saved.matches)) setMatches(saved.matches);
+      if (saved.results && typeof saved.results === 'object') setResults(saved.results);
+      if (Array.isArray(saved.finalStandings)) setFinalStandings(saved.finalStandings);
+      if (typeof saved.pointsWin === 'number') setPointsWin(saved.pointsWin);
+      if (typeof saved.pointsDraw === 'number') setPointsDraw(saved.pointsDraw);
+      if (typeof saved.pointsLoss === 'number') setPointsLoss(saved.pointsLoss);
+      if (typeof saved.pointsPerGoal === 'number') setPointsPerGoal(saved.pointsPerGoal);
+      if (typeof saved.returnStep === 'number') setReturnStep(saved.returnStep);
+    }
+  }, []);
+
+  // Persist relevant state whenever it changes
+  useEffect(() => {
+    const stateToSave = {
+      step,
+      numPlayers,
+      numFields,
+      playersPerTeam,
+      numRounds,
+      playerNames,
+      matches,
+      results,
+      finalStandings,
+      pointsWin,
+      pointsDraw,
+      pointsLoss,
+      pointsPerGoal,
+      returnStep
+    };
+    saveStateToStorage(stateToSave);
+  }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
 
   useEffect(() => {
     if (numPlayers > 0 && playersPerTeam > 0 && numFields > 0) {
