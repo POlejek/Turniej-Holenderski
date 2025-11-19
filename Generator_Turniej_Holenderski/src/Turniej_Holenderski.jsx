@@ -60,6 +60,9 @@ export default function TournamentGenerator() {
   const [pointsLoss, setPointsLoss] = useState(0);
   const [pointsPerGoal, setPointsPerGoal] = useState(1);
 
+  // Debounced persist: save to localStorage 500ms after last change
+  const saveTimeoutRef = useRef(null);
+
   // Load persisted state on mount
   useEffect(() => {
     const saved = loadStateFromStorage();
@@ -81,9 +84,7 @@ export default function TournamentGenerator() {
     }
   }, []);
 
-  // Debounced persist: save to localStorage 500ms after last change
-  const saveTimeoutRef = useRef(null);
-
+  
   useEffect(() => {
     const stateToSave = () => ({
       step,
@@ -114,36 +115,6 @@ export default function TournamentGenerator() {
       }
     };
   }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
-
-  // Ensure state is flushed on page unload
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
-      saveStateToStorage({
-        step,
-        numPlayers,
-        numFields,
-        playersPerTeam,
-        numRounds,
-        playerNames,
-        matches,
-        results,
-        finalStandings,
-        pointsWin,
-        pointsDraw,
-        pointsLoss,
-        pointsPerGoal,
-        returnStep
-      });
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
-
   // Synchronize input fields with state
   useEffect(() => { setNumPlayersInput(numPlayers === '' ? '' : String(numPlayers)); }, [numPlayers]);
   useEffect(() => { setNumFieldsInput(numFields === '' ? '' : String(numFields)); }, [numFields]);
@@ -192,9 +163,19 @@ export default function TournamentGenerator() {
   }, [numPlayersInput, playersPerTeamInput, numFieldsInput]);
 
   const initializePlayers = () => {
-    const names = Array(numPlayers).fill('').map((_, i) => `Zawodnik ${i + 1}`);
+    const count = arguments.length > 0 && typeof arguments[0] === 'number' ? arguments[0] : numPlayers;
+    const names = Array(count).fill('').map((_, i) => `Zawodnik ${i + 1}`);
     setPlayerNames(names);
   };
+
+  // Ensure when entering the player-name step the list matches the configured number
+  useEffect(() => {
+    if (step === 2) {
+      if (!Array.isArray(playerNames) || playerNames.length !== numPlayers) {
+        initializePlayers(numPlayers);
+      }
+    }
+  }, [step, numPlayers]);
 
   const updatePlayerName = (index, name) => {
     const newNames = [...playerNames];
@@ -237,98 +218,159 @@ export default function TournamentGenerator() {
     const allMatches = [];
     const playerMatchCount = {};
     const playerTeammates = {};
+    // Track last round when a player has played; used to avoid consecutive matches
+    const lastPlayedRound = {};
 
     playerNames.forEach(name => {
       playerMatchCount[name] = 0;
       playerTeammates[name] = new Set();
+      lastPlayedRound[name] = -1000;
     });
 
     const playersPerMatch = playersPerTeam * 2;
-    const matchesPerPlayer = (numRounds * numFields * playersPerMatch) / numPlayers;
+    const totalSlots = numRounds * numFields * playersPerMatch;
+    const matchesPerPlayer = totalSlots / numPlayers;
+
+    // Desired matches per player (distribute remainder among first players)
+    const baseMatches = Math.floor(totalSlots / numPlayers);
+    const extraMatches = totalSlots % numPlayers;
+    const desiredMatches = {};
+    playerNames.forEach((name, idx) => {
+      desiredMatches[name] = baseMatches + (idx < extraMatches ? 1 : 0);
+    });
 
     for (let round = 0; round < numRounds; round++) {
       const playersAssignedThisRound = new Set();
 
-      for (let field = 0; field < numFields; field++) {
-        // Build candidate pool: players not assigned this round, preferring lowest match count
-        const candidates = playerNames
-          .filter(p => !playersAssignedThisRound.has(p))
-          .sort((a, b) => playerMatchCount[a] - playerMatchCount[b]);
+      // Select set of players that still need matches for this round
+      let needyPlayers = playerNames.filter(p => playerMatchCount[p] < (desiredMatches[p] || 0));
+      const comparator = (a, b) => {
+        const aPlayedPrev = lastPlayedRound[a] === round - 1 ? 1 : 0;
+        const bPlayedPrev = lastPlayedRound[b] === round - 1 ? 1 : 0;
+        if (aPlayedPrev !== bPlayedPrev) return aPlayedPrev - bPlayedPrev;
+        if (playerMatchCount[a] !== playerMatchCount[b]) return playerMatchCount[a] - playerMatchCount[b];
+        return lastPlayedRound[a] - lastPlayedRound[b];
+      };
 
-        // If not enough candidates to fill a match, still use lowest-count players
-        if (candidates.length < playersPerMatch) {
-          // In rare cases, allow selecting from all players not already in this match
-          // (but still avoid players already assigned in this round)
-          // This should be uncommon when matchesPerPlayer is integer.
-        }
+      needyPlayers.sort(comparator);
 
-        const pickPlayerForTeam = (team, pool) => {
-          // choose player from pool minimizing prior teammate overlap
-          let bestIdx = 0;
-          let bestScore = Infinity;
-          const lookahead = Math.min(8, pool.length);
+      // If for some reason we don't have enough needy players (edge-case), fall back to all players
+      if (needyPlayers.length < playersPerMatch * numFields) {
+        needyPlayers = playerNames.filter(p => !playersAssignedThisRound.has(p)).sort(comparator);
+      }
+
+      // Choose players that will play this round (exactly playersPerRound)
+      const playersPerRound = numFields * playersPerMatch;
+      const selectedThisRound = needyPlayers.slice(0, playersPerRound);
+
+      // Attempt to split selected players into fields while minimizing teammate repeats.
+      let success = false;
+      let attempts = 0;
+      const maxAttempts = 20;
+
+      while (!success && attempts < maxAttempts) {
+        attempts++;
+        const pool = shuffle(selectedThisRound);
+        const tentativeFields = [];
+        const tempTeammates = {};
+        playerNames.forEach(n => { tempTeammates[n] = new Set(playerTeammates[n]); });
+        let ok = true;
+
+        const pickForTeam = (team, poolLocal) => {
+          let bestIdx = 0; let bestScore = Infinity; const lookahead = Math.min(8, poolLocal.length);
           for (let j = 0; j < lookahead; j++) {
-            const candidate = pool[j];
-            const shared = team.filter(t => playerTeammates[candidate]?.has(t)).length;
-            if (shared < bestScore) {
-              bestScore = shared;
-              bestIdx = j;
-            }
+            const candidate = poolLocal[j];
+            const shared = team.filter(t => tempTeammates[candidate]?.has(t)).length;
+            if (shared < bestScore) { bestScore = shared; bestIdx = j; }
           }
-          return pool.splice(bestIdx, 1)[0];
+          return poolLocal.splice(bestIdx, 1)[0];
         };
 
-        const pool = [...candidates];
-        const team1 = [];
-        const team2 = [];
-
-        for (let i = 0; i < playersPerTeam; i++) {
-          if (pool.length === 0) break;
-          const p = pickPlayerForTeam(team1, pool);
-          team1.push(p);
-        }
-        for (let i = 0; i < playersPerTeam; i++) {
-          if (pool.length === 0) break;
-          const p = pickPlayerForTeam(team2, pool);
-          team2.push(p);
-        }
-
-        // If we couldn't fill teams from candidates (rare), fill from remaining players
-        if (team1.length + team2.length < playersPerMatch) {
-          const remaining = playerNames.filter(p => !playersAssignedThisRound.has(p) && !team1.includes(p) && !team2.includes(p));
-          while (team1.length + team2.length < playersPerMatch && remaining.length > 0) {
-            // pick lowest match count among remaining
-            remaining.sort((a, b) => playerMatchCount[a] - playerMatchCount[b]);
-            const pick = remaining.shift();
-            if (team1.length < playersPerTeam) team1.push(pick);
-            else team2.push(pick);
+        for (let field = 0; field < numFields; field++) {
+          const team1 = [];
+          const team2 = [];
+          for (let i = 0; i < playersPerTeam; i++) {
+            if (pool.length === 0) { ok = false; break; }
+            team1.push(pickForTeam(team1, pool));
           }
+          for (let i = 0; i < playersPerTeam; i++) {
+            if (pool.length === 0) { ok = false; break; }
+            team2.push(pickForTeam(team2, pool));
+          }
+          if (!ok) break;
+
+          // update temp teammates
+          team1.forEach(p1 => team1.forEach(p2 => { if (p1 !== p2) tempTeammates[p1].add(p2); }));
+          team2.forEach(p1 => team2.forEach(p2 => { if (p1 !== p2) tempTeammates[p1].add(p2); }));
+
+          tentativeFields.push({ team1, team2 });
         }
 
-        // Final check: if still not enough players to form full match, skip this field
-        if (team1.length !== playersPerTeam || team2.length !== playersPerTeam) {
-          continue;
+        if (ok && tentativeFields.length === numFields) {
+          // commit tentative fields
+          tentativeFields.forEach((f, idx) => {
+            const fieldNum = idx + 1;
+            [...f.team1, ...f.team2].forEach(p => {
+              playersAssignedThisRound.add(p);
+              playerMatchCount[p] = (playerMatchCount[p] || 0) + 1;
+              lastPlayedRound[p] = round;
+            });
+            f.team1.forEach(p1 => f.team1.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+            f.team2.forEach(p1 => f.team2.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+            allMatches.push({ id: `r${round + 1}f${fieldNum}`, round: round + 1, field: fieldNum, team1: f.team1, team2: f.team2, score1: 0, score2: 0 });
+          });
+          success = true;
+        } else {
+          // rotate selection and retry
+          selectedThisRound.push(selectedThisRound.shift());
         }
+      }
 
-        // Mark players as assigned for this round and increment counts
-        [...team1, ...team2].forEach(p => {
-          playersAssignedThisRound.add(p);
-          playerMatchCount[p] = (playerMatchCount[p] || 0) + 1;
-        });
+      // If we failed to build balanced fields after retries, use a conservative fallback:
+      if (!success) {
+        for (let field = 0; field < numFields; field++) {
+          // Build candidate pool: prefer players not assigned this round and those who still need matches
+          let candidates = playerNames
+            .filter(p => !playersAssignedThisRound.has(p) && playerMatchCount[p] < (desiredMatches[p] || 0))
+            .sort(comparator);
 
-        // Update teammates sets
-        team1.forEach(p1 => team1.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
-        team2.forEach(p1 => team2.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+          if (candidates.length < playersPerMatch) {
+            candidates = playerNames
+              .filter(p => !playersAssignedThisRound.has(p))
+              .sort(comparator);
+          }
 
-        allMatches.push({
-          id: `r${round + 1}f${field + 1}`,
-          round: round + 1,
-          field: field + 1,
-          team1,
-          team2,
-          score1: 0,
-          score2: 0
-        });
+          const pickPlayerForTeam = (team, pool) => {
+            let bestIdx = 0; let bestScore = Infinity; const lookahead = Math.min(8, pool.length);
+            for (let j = 0; j < lookahead; j++) {
+              const candidate = pool[j];
+              const shared = team.filter(t => playerTeammates[candidate]?.has(t)).length;
+              if (shared < bestScore) { bestScore = shared; bestIdx = j; }
+            }
+            return pool.splice(bestIdx, 1)[0];
+          };
+
+          const pool = [...candidates];
+          const team1 = []; const team2 = [];
+          for (let i = 0; i < playersPerTeam; i++) { if (pool.length === 0) break; team1.push(pickPlayerForTeam(team1, pool)); }
+          for (let i = 0; i < playersPerTeam; i++) { if (pool.length === 0) break; team2.push(pickPlayerForTeam(team2, pool)); }
+
+          if (team1.length + team2.length < playersPerMatch) {
+            const remaining = playerNames.filter(p => !playersAssignedThisRound.has(p) && !team1.includes(p) && !team2.includes(p));
+            while (team1.length + team2.length < playersPerMatch && remaining.length > 0) {
+              remaining.sort((a, b) => playerMatchCount[a] - playerMatchCount[b]);
+              const pick = remaining.shift(); if (team1.length < playersPerTeam) team1.push(pick); else team2.push(pick);
+            }
+          }
+
+          if (team1.length !== playersPerTeam || team2.length !== playersPerTeam) continue;
+
+          [...team1, ...team2].forEach(p => { playersAssignedThisRound.add(p); playerMatchCount[p] = (playerMatchCount[p] || 0) + 1; lastPlayedRound[p] = round; });
+          team1.forEach(p1 => team1.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+          team2.forEach(p1 => team2.forEach(p2 => { if (p1 !== p2) playerTeammates[p1].add(p2); }));
+
+          allMatches.push({ id: `r${round + 1}f${field + 1}`, round: round + 1, field: field + 1, team1, team2, score1: 0, score2: 0 });
+        }
       }
     }
 
@@ -427,6 +469,18 @@ export default function TournamentGenerator() {
     setStep(5);
   };
 
+  // Ensure standings are calculated when user navigates to step 5
+  // This covers timing issues where matches/results may have been set just before navigation.
+  useEffect(() => {
+    if (step === 5) {
+      // If there are matches but standings are empty, (re)calculate them
+      if (matches && matches.length > 0 && finalStandings.length === 0) {
+        calculateStandings();
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, matches, results]);
+
   const exportResults = () => {
     let csv = '\uFEFF';
     csv += 'PARAMETRY TURNIEJU\n';
@@ -468,6 +522,48 @@ export default function TournamentGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  const resetCache = () => {
+    // Potwierdzenie akcji
+    if (!window.confirm('Czy na pewno chcesz zresetować pamięć podręczną i odświeżyć aplikację?')) return;
+
+    // Anuluj zaplanowane zapisy
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn('Nie udało się usunąć pamięci podręcznej', e);
+    }
+
+    // Zresetuj stany do wartości domyślnych
+    setStep(1);
+    setNumPlayers(8);
+    setNumFields(2);
+    setPlayersPerTeam(2);
+    setNumRounds(0);
+    setNumPlayersInput('8');
+    setNumFieldsInput('2');
+    setPlayersPerTeamInput('2');
+    setNumRoundsInput('0');
+    setInputError('');
+    setSuggestedRounds(0);
+    setPlayerNames([]);
+    setMatches([]);
+    setResults({});
+    setFinalStandings([]);
+    setReturnStep(null);
+    setPointsWin(10);
+    setPointsDraw(5);
+    setPointsLoss(0);
+    setPointsPerGoal(1);
+
+    // Odśwież stronę, aby zapewnić pełne wyczyszczenie stanu UI
+    window.location.reload();
+  };
+
   const calculateRounds = () => {
     const rounds = [];
     for (let i = 0; i < numRounds; i++) {
@@ -491,8 +587,16 @@ export default function TournamentGenerator() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 sm:p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 md:p-8 mb-6">
-          <div className="mb-4 sm:mb-6">
+          <div className="mb-4 sm:mb-6 flex items-center justify-between">
             <Logo />
+            <div className="ml-4">
+              <button
+                onClick={resetCache}
+                className="bg-red-50 text-red-700 py-2 px-3 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+              >
+                RESETUJ/ODŚWIEŻ
+              </button>
+            </div>
           </div>
 
           {step === 1 && (
@@ -650,21 +754,28 @@ export default function TournamentGenerator() {
               <button
                 onClick={() => {
                   // Validate all fields before proceeding
+                  const parsedNumPlayers = numPlayersInput ? parseInt(numPlayersInput) : NaN;
+                  const parsedNumFields = numFieldsInput ? parseInt(numFieldsInput) : NaN;
+                  const parsedPlayersPerTeam = playersPerTeamInput ? parseInt(playersPerTeamInput) : NaN;
+                  const parsedNumRounds = numRoundsInput ? parseInt(numRoundsInput) : NaN;
+
                   if (
-                    !numPlayersInput || isNaN(parseInt(numPlayersInput)) || parseInt(numPlayersInput) < 4 ||
-                    !numFieldsInput || isNaN(parseInt(numFieldsInput)) || parseInt(numFieldsInput) < 1 ||
-                    !playersPerTeamInput || isNaN(parseInt(playersPerTeamInput)) || parseInt(playersPerTeamInput) < 1 ||
-                    !numRoundsInput || isNaN(parseInt(numRoundsInput)) || parseInt(numRoundsInput) < 1
+                    isNaN(parsedNumPlayers) || parsedNumPlayers < 4 ||
+                    isNaN(parsedNumFields) || parsedNumFields < 1 ||
+                    isNaN(parsedPlayersPerTeam) || parsedPlayersPerTeam < 1 ||
+                    isNaN(parsedNumRounds) || parsedNumRounds < 1
                   ) {
                     setInputError('Uzupełnij poprawnie wszystkie pola liczbowe.');
                     return;
                   }
+
                   setInputError('');
-                  setNumPlayers(parseInt(numPlayersInput));
-                  setNumFields(parseInt(numFieldsInput));
-                  setPlayersPerTeam(parseInt(playersPerTeamInput));
-                  setNumRounds(parseInt(numRoundsInput));
-                  initializePlayers();
+                  setNumPlayers(parsedNumPlayers);
+                  setNumFields(parsedNumFields);
+                  setPlayersPerTeam(parsedPlayersPerTeam);
+                  setNumRounds(parsedNumRounds);
+                  // initialize immediately with parsed count to avoid async state timing issues
+                  initializePlayers(parsedNumPlayers);
                   setStep(2);
                 }}
                 className="w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base sm:text-lg"
@@ -739,51 +850,7 @@ export default function TournamentGenerator() {
                 </div>
               </div>
 
-              {/* Matryca meczów */}
-              <div className="overflow-x-auto bg-white rounded-lg shadow border my-4">
-                <table className="min-w-full text-xs sm:text-sm">
-                  <thead>
-                    <tr>
-                      <th className="px-2 py-2 border-b bg-gray-50 text-left">Zawodnik</th>
-                      {Array.from({ length: numRounds }).map((_, r) => (
-                        <th key={r} className="px-2 py-2 border-b bg-gray-50 text-center">R{r + 1}</th>
-                      ))}
-                      <th className="px-2 py-2 border-b bg-gray-50 text-center">Suma</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {playerNames.map((name, idx) => {
-                      // Oblicz ile meczów dany zawodnik zagra w każdej rundzie (0 lub 1)
-                      // Rozkładamy mecze "równo" na podstawie round-robin, bez generowania faktycznych drużyn
-                      // Algorytm: rozdziel sloty meczowe na zawodników po kolei
-                      const totalSlots = numRounds * numFields * playersPerTeam * 2;
-                      const base = Math.floor(totalSlots / numPlayers);
-                      const extra = totalSlots % numPlayers;
-                      // Rozdziel "nadmiarowe" sloty na pierwszych extra zawodników
-                      const playerTotal = idx < extra ? base + 1 : base;
-                      // Rozkład na rundy: rozkładamy mecze gracza w kolejnych rundach,
-                      // przesuwając startową rundę o indeks zawodnika (offset). Dzięki temu
-                      // kolejne osoby nie będą miały identycznego wzoru i każda runda
-                      // otrzyma przydziały — unikamy sytuacji, gdzie konkretna runda
-                      // miałaby 0 graczy.
-                      let roundArr = Array(numRounds).fill(0);
-                      for (let i = 0; i < playerTotal; i++) {
-                        const roundIndex = (i + idx) % numRounds;
-                        roundArr[roundIndex] += 1;
-                      }
-                      return (
-                        <tr key={name}>
-                          <td className="px-2 py-1 border-b font-medium whitespace-nowrap">{name}</td>
-                          {roundArr.map((val, r) => (
-                            <td key={r} className="px-2 py-1 border-b text-center">{val}</td>
-                          ))}
-                          <td className="px-2 py-1 border-b text-center font-bold">{playerTotal}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {/* Removed inline matryca from Podsumowanie. The real matrix is available after Generuj (see dedicated view). */}
 
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
@@ -794,7 +861,11 @@ export default function TournamentGenerator() {
                     Wstecz
                   </button>
                   <button
-                    onClick={generateTournament}
+                        onClick={() => {
+                          generateTournament();
+                          // After generation, navigate to matches view (step 4)
+                          setStep(4);
+                        }}
                     className="w-full bg-green-600 text-white py-3 sm:py-4 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 text-base"
                   >
                     <Play className="w-5 h-5" />
@@ -810,6 +881,62 @@ export default function TournamentGenerator() {
                 >
                   <Users className="w-4 h-4 sm:w-5 sm:h-5" />
                   Edytuj imiona zawodników
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 6 && (
+            <div className="space-y-4 sm:space-y-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Harmonogram (matryca zawodnik vs runda)</h2>
+
+              <div className="overflow-x-auto bg-white rounded-lg shadow border my-4">
+                <table className="min-w-full text-xs sm:text-sm">
+                  <thead>
+                    <tr>
+                      <th className="px-2 py-2 border-b bg-gray-50 text-left">Zawodnik</th>
+                      {Array.from({ length: numRounds }).map((_, r) => (
+                        <th key={r} className="px-2 py-2 border-b bg-gray-50 text-center">R{r + 1}</th>
+                      ))}
+                      <th className="px-2 py-2 border-b bg-gray-50 text-center">Suma</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playerNames.map((name) => {
+                      const roundArr = Array(numRounds).fill(0);
+                      matches.forEach(m => {
+                        if (m.team1.includes(name) || m.team2.includes(name)) {
+                          const rIdx = Math.max(0, (m.round || 1) - 1);
+                          if (rIdx < numRounds) roundArr[rIdx] += 1;
+                        }
+                      });
+                      const playerTotal = roundArr.reduce((s, v) => s + v, 0);
+                      return (
+                        <tr key={name}>
+                          <td className="px-2 py-1 border-b font-medium whitespace-nowrap">{name}</td>
+                          {roundArr.map((val, r) => (
+                            <td key={r} className="px-2 py-1 border-b text-center">{val}</td>
+                          ))}
+                          <td className="px-2 py-1 border-b text-center font-bold">{playerTotal}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(4)}
+                  className="bg-gray-200 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Powrót do meczów
+                </button>
+                <button
+                  onClick={() => setStep(5)}
+                  className="bg-indigo-600 text-white py-2 px-3 rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Pokaż tabelę końcową
                 </button>
               </div>
             </div>
@@ -870,6 +997,12 @@ export default function TournamentGenerator() {
                 >
                   <Trophy className="w-5 h-5" />
                   Pokaż tabelę końcową
+                </button>
+                <button
+                  onClick={() => setStep(6)}
+                  className="w-full bg-gray-100 text-gray-800 py-2 sm:py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm sm:text-base flex items-center justify-center gap-2"
+                >
+                  Pokaż matrycę (harmonogram)
                 </button>
                 <button
                   onClick={() => {
