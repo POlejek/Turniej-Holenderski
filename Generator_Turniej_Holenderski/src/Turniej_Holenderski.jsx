@@ -377,7 +377,7 @@ export default function TournamentGenerator() {
     setMatches(allMatches);
     const initialResults = {};
     allMatches.forEach(match => {
-      initialResults[match.id] = { score1: 0, score2: 0 };
+      initialResults[match.id] = { score1: '', score2: '' };
     });
     setResults(initialResults);
     setStep(4);
@@ -395,7 +395,7 @@ export default function TournamentGenerator() {
 
   const calculateStandings = () => {
     const standings = {};
-    
+
     playerNames.forEach(name => {
       standings[name] = {
         name,
@@ -411,14 +411,19 @@ export default function TournamentGenerator() {
     });
 
     matches.forEach(match => {
-      const score1 = results[match.id]?.score1 || 0;
-      const score2 = results[match.id]?.score2 || 0;
-      
+      const score1 = results[match.id]?.score1;
+      const score2 = results[match.id]?.score2;
+
+      // Pomijaj mecze z pustymi wynikami
+      if (score1 === '' || score2 === '' || score1 === undefined || score2 === undefined) {
+        return;
+      }
+
       match.team1.forEach(player => {
         standings[player].matches++;
         standings[player].goalsFor += score1;
         standings[player].goalsAgainst += score2;
-        
+
         if (score1 > score2) {
           standings[player].wins++;
           standings[player].points += pointsWin;
@@ -429,16 +434,15 @@ export default function TournamentGenerator() {
           standings[player].losses++;
           standings[player].points += pointsLoss;
         }
-        
-        // Dodaj punkty za bramki
+
         standings[player].points += score1 * pointsPerGoal;
       });
-      
+
       match.team2.forEach(player => {
         standings[player].matches++;
         standings[player].goalsFor += score2;
         standings[player].goalsAgainst += score1;
-        
+
         if (score2 > score1) {
           standings[player].wins++;
           standings[player].points += pointsWin;
@@ -449,8 +453,7 @@ export default function TournamentGenerator() {
           standings[player].losses++;
           standings[player].points += pointsLoss;
         }
-        
-        // Dodaj punkty za bramki
+
         standings[player].points += score2 * pointsPerGoal;
       });
     });
@@ -523,8 +526,7 @@ export default function TournamentGenerator() {
   };
 
   const resetCache = () => {
-    // Potwierdzenie akcji
-    if (!window.confirm('Czy na pewno chcesz zresetować pamięć podręczną i odświeżyć aplikację?')) return;
+    if (!window.confirm('Użycie tego usunie wszystkie dane o obecnym turnieju. Czy jesteś tego pewny?')) return;
 
     // Anuluj zaplanowane zapisy
     if (saveTimeoutRef.current) {
@@ -562,6 +564,27 @@ export default function TournamentGenerator() {
 
     // Odśwież stronę, aby zapewnić pełne wyczyszczenie stanu UI
     window.location.reload();
+  };
+
+  const handleNewTournament = () => {
+    const confirmNewTournament = window.confirm("Czy na pewno chcesz rozpocząć nowy turniej? Wszystkie dane zostaną utracone.");
+    if (confirmNewTournament) {
+      setStep(1);
+      setNumPlayers(8);
+      setNumFields(2);
+      setPlayersPerTeam(2);
+      setNumRounds(0);
+      setPlayerNames([]);
+      setMatches([]);
+      setResults({});
+      setFinalStandings([]);
+      setReturnStep(null);
+      setPointsWin(10);
+      setPointsDraw(5);
+      setPointsLoss(0);
+      setPointsPerGoal(1);
+      localStorage.removeItem(STORAGE_KEY);
+    }
   };
 
   const calculateRounds = () => {
@@ -800,7 +823,7 @@ export default function TournamentGenerator() {
                     value={name}
                     onChange={(e) => updatePlayerName(index, e.target.value)}
                     placeholder={`Zawodnik ${index + 1}`}
-                    className="px-3 sm:px-4 py-2 sm:py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className={`px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${name.trim() === '' ? 'border-red-500' : 'border-gray-300'}`}
                   />
                 ))}
               </div>
@@ -815,7 +838,8 @@ export default function TournamentGenerator() {
                 {!returnStep && (
                   <button
                     onClick={() => setStep(3)}
-                    className="w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base"
+                    className={`w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base ${playerNames.some(name => name.trim() === '') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={playerNames.some(name => name.trim() === '')}
                   >
                     Dalej
                   </button>
@@ -963,19 +987,21 @@ export default function TournamentGenerator() {
                             </div>
                             <div className="flex items-center gap-2 mx-auto sm:mx-0">
                               <input
-                                type="number"
-                                min="0"
-                                value={results[match.id]?.score1 || 0}
-                                onChange={(e) => updateScore(match.id, 'score1', e.target.value)}
-                                className="w-14 sm:w-16 px-2 py-1 sm:py-2 border border-gray-300 rounded text-center text-base"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={results[match.id]?.score1 === undefined ? '' : results[match.id]?.score1}
+                                onChange={e => updateScore(match.id, 'score1', e.target.value.replace(/[^0-9]/g, ''))}
+                                className={`w-14 sm:w-16 px-2 py-1 sm:py-2 border rounded text-center text-base ${results[match.id]?.score1 === '' || results[match.id]?.score1 === undefined ? 'border-red-500' : 'border-gray-300'}`}
                               />
                               <span className="font-bold text-base sm:text-lg">:</span>
                               <input
-                                type="number"
-                                min="0"
-                                value={results[match.id]?.score2 || 0}
-                                onChange={(e) => updateScore(match.id, 'score2', e.target.value)}
-                                className="w-14 sm:w-16 px-2 py-1 sm:py-2 border border-gray-300 rounded text-center text-base"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={results[match.id]?.score2 === undefined ? '' : results[match.id]?.score2}
+                                onChange={e => updateScore(match.id, 'score2', e.target.value.replace(/[^0-9]/g, ''))}
+                                className={`w-14 sm:w-16 px-2 py-1 sm:py-2 border rounded text-center text-base ${results[match.id]?.score2 === '' || results[match.id]?.score2 === undefined ? 'border-red-500' : 'border-gray-300'}`}
                               />
                             </div>
                             <div className="flex-1 w-full sm:w-auto sm:text-right">
@@ -1078,12 +1104,7 @@ export default function TournamentGenerator() {
                   Eksportuj wyniki
                 </button>
                 <button
-                  onClick={() => {
-                    setStep(1);
-                    setMatches([]);
-                    setResults({});
-                    setFinalStandings([]);
-                  }}
+                  onClick={resetCache}
                   className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center justify-center gap-2 text-sm sm:text-base"
                 >
                   <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
