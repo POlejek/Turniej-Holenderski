@@ -180,15 +180,38 @@ export default function TournamentGenerator() {
   const updatePlayerName = (index, name) => {
     const newNames = [...playerNames];
     const oldName = newNames[index];
-    newNames[index] = name;
+    
+    // Walidacja unikalności - sprawdź czy nazwa już istnieje (ignorując obecny indeks)
+    const trimmedName = name.trim();
+    if (trimmedName) {
+      const duplicateIndex = newNames.findIndex((n, i) => 
+        i !== index && n.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      
+      if (duplicateIndex !== -1) {
+        // Znajdź numer do dodania
+        let counter = 2;
+        let uniqueName = `${trimmedName} (${counter})`;
+        while (newNames.some((n, i) => i !== index && n.trim().toLowerCase() === uniqueName.toLowerCase())) {
+          counter++;
+          uniqueName = `${trimmedName} (${counter})`;
+        }
+        newNames[index] = uniqueName;
+      } else {
+        newNames[index] = name;
+      }
+    } else {
+      newNames[index] = name;
+    }
+    
     setPlayerNames(newNames);
     
     // Jeśli turniej został już wygenerowany, zaktualizuj nazwy w meczach
     if (matches.length > 0) {
       const updatedMatches = matches.map(match => ({
         ...match,
-        team1: match.team1.map(player => player === oldName ? name : player),
-        team2: match.team2.map(player => player === oldName ? name : player)
+        team1: match.team1.map(player => player === oldName ? newNames[index] : player),
+        team2: match.team2.map(player => player === oldName ? newNames[index] : player)
       }));
       setMatches(updatedMatches);
       
