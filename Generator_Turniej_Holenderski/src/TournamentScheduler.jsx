@@ -27,6 +27,7 @@ export default function TournamentScheduler() {
   const [step, setStep] = useState(1);
   const [numTeams, setNumTeams] = useState('4');
   const [numFields, setNumFields] = useState('1');
+  const [matchesPerPair, setMatchesPerPair] = useState('1');
   const [teams, setTeams] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [expandedTeams, setExpandedTeams] = useState({});
@@ -43,6 +44,7 @@ export default function TournamentScheduler() {
       if (typeof saved.step === 'number') setStep(saved.step);
       if (typeof saved.numTeams === 'string') setNumTeams(saved.numTeams);
       if (typeof saved.numFields === 'string') setNumFields(saved.numFields);
+      if (typeof saved.matchesPerPair === 'string') setMatchesPerPair(saved.matchesPerPair);
       if (Array.isArray(saved.teams)) setTeams(saved.teams);
       if (Array.isArray(saved.schedule)) setSchedule(saved.schedule);
       if (saved.results && typeof saved.results === 'object') setResults(saved.results);
@@ -60,6 +62,7 @@ export default function TournamentScheduler() {
         step,
         numTeams,
         numFields,
+        matchesPerPair,
         teams,
         schedule,
         results,
@@ -73,7 +76,7 @@ export default function TournamentScheduler() {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [step, numTeams, numFields, teams, schedule, results, showStandings]);
+  }, [step, numTeams, numFields, matchesPerPair, teams, schedule, results, showStandings]);
 
   const initializeTeams = () => {
     const teamCount = parseInt(numTeams) || 2;
@@ -208,12 +211,14 @@ export default function TournamentScheduler() {
     const totalTeams = isOdd ? n + 1 : n;
     const rounds = totalTeams - 1;
     const matchesPerRound = totalTeams / 2;
+    const numMatchesPerPair = parseInt(matchesPerPair) || 1;
 
     const teamList = [...Array(totalTeams).keys()].map(i => i + 1);
     if (isOdd) teamList[totalTeams - 1] = null;
 
     const allMatches = [];
 
+    // Generuj podstawową rundę Bergera
     for (let round = 0; round < rounds; round++) {
       const roundMatches = [];
       
@@ -241,6 +246,21 @@ export default function TournamentScheduler() {
       teamList.splice(1, rotating.length, ...rotating);
     }
 
+    // Jeśli więcej niż 1 mecz na parę, dodaj kolejne rundy z zamienionymi gospodarzami/gośćmi
+    const finalMatches = [];
+    for (let iteration = 0; iteration < numMatchesPerPair; iteration++) {
+      allMatches.forEach((roundMatches) => {
+        const roundMatchesCopy = roundMatches.map(match => {
+          // Dla nieparzystych iteracji (1, 3, 5...) zamieniamy gospodarza z gościem
+          if (iteration % 2 === 1) {
+            return { home: match.away, away: match.home };
+          }
+          return { ...match };
+        });
+        finalMatches.push(roundMatchesCopy);
+      });
+    }
+
     const scheduledMatches = [];
     const fieldsCount = parseInt(numFields) || 1;
     let fieldAssignments = Array(fieldsCount).fill(0);
@@ -266,7 +286,7 @@ export default function TournamentScheduler() {
 
     const newResults = {};
 
-    allMatches.forEach((roundMatches, roundIndex) => {
+    finalMatches.forEach((roundMatches, roundIndex) => {
       roundMatches.forEach((match) => {
         const fieldIndex = fieldAssignments.indexOf(Math.min(...fieldAssignments));
         
@@ -455,6 +475,7 @@ export default function TournamentScheduler() {
       setStep(1);
       setNumTeams('4');
       setNumFields('1');
+      setMatchesPerPair('1');
       setTeams([]);
       setSchedule([]);
       setExpandedTeams({});
@@ -482,6 +503,7 @@ export default function TournamentScheduler() {
       const totalTeams = isOdd ? n + 1 : n;
       const rounds = totalTeams - 1;
       const matchesPerRound = totalTeams / 2;
+      const numMatchesPerPair = parseInt(matchesPerPair) || 1;
 
       const teamList = [...Array(totalTeams).keys()].map(i => i + 1);
       if (isOdd) teamList[totalTeams - 1] = null;
@@ -515,6 +537,21 @@ export default function TournamentScheduler() {
         teamList.splice(1, rotating.length, ...rotating);
       }
 
+      // Jeśli więcej niż 1 mecz na parę, dodaj kolejne rundy z zamienionymi gospodarzami/gośćmi
+      const finalMatches = [];
+      for (let iteration = 0; iteration < numMatchesPerPair; iteration++) {
+        allMatches.forEach((roundMatches) => {
+          const roundMatchesCopy = roundMatches.map(match => {
+            // Dla nieparzystych iteracji (1, 3, 5...) zamieniamy gospodarza z gościem
+            if (iteration % 2 === 1) {
+              return { home: match.away, away: match.home };
+            }
+            return { ...match };
+          });
+          finalMatches.push(roundMatchesCopy);
+        });
+      }
+
       const scheduledMatches = [];
       const fieldsCount = parseInt(newFields) || 1;
       let fieldAssignments = Array(fieldsCount).fill(0);
@@ -538,7 +575,7 @@ export default function TournamentScheduler() {
 
       const newResults = {};
 
-      allMatches.forEach((roundMatches, roundIndex) => {
+      finalMatches.forEach((roundMatches, roundIndex) => {
         roundMatches.forEach((match) => {
           const fieldIndex = fieldAssignments.indexOf(Math.min(...fieldAssignments));
           
@@ -634,6 +671,25 @@ export default function TournamentScheduler() {
                   className="w-full p-3 sm:p-4 text-xl sm:text-2xl border-2 border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="Wpisz liczbę"
                 />
+              </div>
+
+              <div className="bg-purple-50 p-4 sm:p-6 rounded-lg sm:rounded-xl">
+                <label className="block text-base sm:text-lg font-semibold text-purple-900 mb-2 sm:mb-3">
+                  Liczba meczów między drużynami
+                </label>
+                <p className="text-xs sm:text-sm text-purple-700 mb-2">
+                  Wybierz ile razy każda para drużyn ma ze sobą zagrać
+                </p>
+                <select
+                  value={matchesPerPair}
+                  onChange={(e) => setMatchesPerPair(e.target.value)}
+                  className="w-full p-3 sm:p-4 text-xl sm:text-2xl border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                >
+                  <option value="1">1 mecz (pojedyncza runda)</option>
+                  <option value="2">2 mecze (mecz i rewanż)</option>
+                  <option value="3">3 mecze</option>
+                  <option value="4">4 mecze</option>
+                </select>
               </div>
 
               <button
