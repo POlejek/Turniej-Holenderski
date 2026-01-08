@@ -4,7 +4,7 @@ import { Save, Upload, Download, Users, Award, ArrowRight, RotateCcw, Edit2, Tra
 export default function GroupStageTournament() {
   const STORAGE_KEY = 'group_stage_tournament_v2';
 
-  // Kroki: 0=setup, 1=qualifying, 2=finals
+  // Kroki: 0=setup, 1=team names, 2=qualifying, 3=finals
   const [step, setStep] = useState(0);
   
   // Setup
@@ -16,6 +16,7 @@ export default function GroupStageTournament() {
   const [pointsWin, setPointsWin] = useState(3);
   const [pointsDraw, setPointsDraw] = useState(1);
   const [matchesPerPair, setMatchesPerPair] = useState(1);
+  const [teamNamesInput, setTeamNamesInput] = useState('');
 
   // Dane
   const [teams, setTeams] = useState([]);
@@ -42,14 +43,14 @@ export default function GroupStageTournament() {
     const saveTimer = setTimeout(() => {
       const state = {
         step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
-        pointsWin, pointsDraw, matchesPerPair, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
+        pointsWin, pointsDraw, matchesPerPair, teamNamesInput, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
         tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }, 500);
     return () => clearTimeout(saveTimer);
   }, [step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
-      pointsWin, pointsDraw, matchesPerPair, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
+      pointsWin, pointsDraw, matchesPerPair, teamNamesInput, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
       tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier]);
 
   // Load from localStorage
@@ -67,6 +68,7 @@ export default function GroupStageTournament() {
         setPointsWin(state.pointsWin || 3);
         setPointsDraw(state.pointsDraw || 1);
         setMatchesPerPair(state.matchesPerPair || 1);
+        setTeamNamesInput(state.teamNamesInput || '');
         setTeams(state.teams || []);
         setQualifyingGroups(state.qualifyingGroups || []);
         setQualifyingMatches(state.qualifyingMatches || {});
@@ -125,7 +127,7 @@ export default function GroupStageTournament() {
     return matches;
   };
 
-  // Inicjalizacja turnieju
+  // Inicjalizacja - przejście do ekranu nazw drużyn
   const initializeTournament = () => {
     const totalTeams = numQualGroups * teamsPerQualGroup;
     const tier1Total = tier1Groups * tier1TeamsPerGroup;
@@ -141,9 +143,34 @@ export default function GroupStageTournament() {
       return;
     }
 
-    const newTeams = Array.from({ length: totalTeams }, (_, i) => ({
+    // Stwórz domyślne nazwy drużyn
+    const defaultNames = Array.from({ length: totalTeams }, (_, i) => `Drużyna ${i + 1}`);
+    setTeamNamesInput(defaultNames.join('\n'));
+
+    setStep(1); // Przejdź do ekranu nazw
+  };
+
+  // Losowanie grup i start turnieju
+  const startTournamentWithTeams = () => {
+    const totalTeams = numQualGroups * teamsPerQualGroup;
+    
+    // Parsuj nazwy drużyn
+    const names = teamNamesInput
+      .split('\n')
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+
+    if (names.length < totalTeams) {
+      alert(`Potrzebujesz ${totalTeams} nazw drużyn! Masz tylko ${names.length}.`);
+      return;
+    }
+
+    // Losowe przydzielenie drużyn do grup
+    const shuffledNames = [...names].sort(() => Math.random() - 0.5);
+
+    const newTeams = shuffledNames.slice(0, totalTeams).map((name, i) => ({
       id: i + 1,
-      name: `Drużyna ${i + 1}`,
+      name: name,
       originalGroup: Math.floor(i / teamsPerQualGroup),
       qualPoints: 0, qualGoalsFor: 0, qualGoalsAgainst: 0,
       qualWins: 0, qualDraws: 0, qualLosses: 0,
@@ -173,7 +200,7 @@ export default function GroupStageTournament() {
     });
     setQualifyingResults(results);
 
-    setStep(1);
+    setStep(2); // Przejdź do kwalifikacji
     setSelectedGroup(0);
   };
 
@@ -399,7 +426,7 @@ export default function GroupStageTournament() {
     });
     setTier2Results(tier2ResultsData);
 
-    setStep(2);
+    setStep(3);
     setSelectedGroup(0);
     setCurrentTier(1);
   };
@@ -742,8 +769,71 @@ export default function GroupStageTournament() {
     );
   }
 
-  // STEP 1: Qualifying
+  // STEP 1: Team Names
   if (step === 1) {
+    const totalTeams = numQualGroups * teamsPerQualGroup;
+    const currentLines = teamNamesInput.split('\n').filter(line => line.trim().length > 0).length;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <h1 className="text-4xl font-bold text-gray-800 mb-2 text-center">
+              Nazwy drużyn
+            </h1>
+            <p className="text-gray-600 text-center mb-6">
+              Uzupełnij nazwy {totalTeams} drużyn. Możesz wkleić z Excela (każda nazwa w nowej linii).
+            </p>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-800">
+                <strong>Wskazówki:</strong><br />
+                • Każda drużyna w osobnej linii<br />
+                • Możesz skopiować kolumnę z Excela i wkleić tutaj<br />
+                • Drużyny zostaną losowo przydzielone do {numQualGroups} grup po {teamsPerQualGroup} drużyn<br />
+                • Aktualna liczba: <strong className={currentLines === totalTeams ? 'text-green-600' : 'text-red-600'}>{currentLines} / {totalTeams}</strong>
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Lista drużyn (po jednej w linii):
+              </label>
+              <textarea
+                value={teamNamesInput}
+                onChange={(e) => setTeamNamesInput(e.target.value)}
+                rows={Math.min(totalTeams + 2, 20)}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-sm focus:border-blue-500 focus:outline-none"
+                placeholder={`Drużyna 1\nDrużyna 2\nDrużyna 3\n...`}
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Wklej nazwy z Excela lub wprowadź ręcznie
+              </p>
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setStep(0)}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition duration-200"
+              >
+                ← Wstecz
+              </button>
+              <button
+                onClick={startTournamentWithTeams}
+                disabled={currentLines < totalTeams}
+                className="flex-1 bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Losuj grupy i rozpocznij →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // STEP 2: Qualifying
+  if (step === 2) {
     const allMatchesCompleted = Object.values(qualifyingResults).every(r => r.completed);
 
     return (
@@ -867,8 +957,8 @@ export default function GroupStageTournament() {
     );
   }
 
-  // STEP 2: Finals (I i II liga)
-  if (step === 2) {
+  // STEP 3: Finals (I i II liga)
+  if (step === 3) {
     const currentGroups = currentTier === 1 ? tier1GroupsData : tier2GroupsData;
     const currentPhase = currentTier === 1 ? 'tier1' : 'tier2';
     const currentResults = currentTier === 1 ? tier1Results : tier2Results;
