@@ -192,22 +192,15 @@ export default function GroupTournament() {
       return;
     }
 
-    // Oznacz drużynę jako wycofaną
-    setTeams(teams.map(t => 
-      t.id === teamId 
-        ? { ...t, withdrawn: true, name: `${t.name} [WYCOFANA]` }
-        : t
-    ));
-
-    // Automatyczne walkowery dla wszystkich przyszłych i bieżących meczów
     // W fazie Swiss
     if (step === 3 && swissMatches.length > 0) {
       const updatedResults = { ...swissResults };
       
-      swissMatches.forEach((round, roundIndex) => {
+      swissMatches.forEach((round) => {
         round.forEach(match => {
-          if ((match.teamA === teamId || match.teamB === teamId) && !updatedResults[match.id]) {
-            // Ustaw walkower dla przeciwnika
+          const result = updatedResults[match.id];
+          // Ustaw walkower jeśli mecz jeszcze nie został zakończony
+          if ((match.teamA === teamId || match.teamB === teamId) && (!result || !result.completed)) {
             if (match.isBye) {
               updatedResults[match.id] = {
                 scoreA: 0,
@@ -227,14 +220,57 @@ export default function GroupTournament() {
       });
       
       setSwissResults(updatedResults);
-    }
-
-    // W fazie Playoff - przeciwnik automatycznie awansuje
-    if (step === 4 && playoffBracket.length > 0) {
+      
+      // Aktualizuj statystyki drużyn dla meczów z walkowerami
+      const updatedTeams = teams.map(t => {
+        if (t.id === teamId) {
+          return { ...t, withdrawn: true, name: `${t.name} [WYCOFANA]` };
+        }
+        
+        const teamData = { ...t };
+        
+        swissMatches.forEach((round) => {
+          round.forEach(match => {
+            if (!match.isBye && (match.teamA === teamId || match.teamB === teamId)) {
+              const isOpponent = (match.teamA === t.id || match.teamB === t.id);
+              const result = updatedResults[match.id];
+              
+              if (isOpponent && result && result.completed) {
+                const isTeamA = match.teamA === t.id;
+                const scoreFor = isTeamA ? parseInt(result.scoreA) : parseInt(result.scoreB);
+                const scoreAgainst = isTeamA ? parseInt(result.scoreB) : parseInt(result.scoreA);
+                const opponentId = isTeamA ? match.teamB : match.teamA;
+                
+                const alreadyCounted = teamData.swissOpponents?.includes(opponentId);
+                
+                if (!alreadyCounted) {
+                  teamData.goalsFor = (teamData.goalsFor || 0) + scoreFor;
+                  teamData.goalsAgainst = (teamData.goalsAgainst || 0) + scoreAgainst;
+                  
+                  if (scoreFor > scoreAgainst) {
+                    teamData.swissPoints = (teamData.swissPoints || 0) + pointsWin;
+                    teamData.wins = (teamData.wins || 0) + 1;
+                  }
+                  
+                  teamData.swissOpponents = [...(teamData.swissOpponents || []), opponentId];
+                }
+              }
+            }
+          });
+        });
+        
+        return teamData;
+      });
+      
+      setTeams(updatedTeams);
+    } 
+    // W fazie Playoff
+    else if (step === 4 && playoffBracket.length > 0) {
       const updatedResults = { ...playoffResults };
       
       playoffBracket.forEach(match => {
-        if ((match.teamA === teamId || match.teamB === teamId) && !updatedResults[match.id]) {
+        const result = updatedResults[match.id];
+        if ((match.teamA === teamId || match.teamB === teamId) && (!result || !result.winner)) {
           const winner = match.teamA === teamId ? match.teamB : match.teamA;
           updatedResults[match.id] = {
             scoreA: match.teamA === teamId ? 0 : 3,
@@ -245,6 +281,20 @@ export default function GroupTournament() {
       });
       
       setPlayoffResults(updatedResults);
+      
+      setTeams(teams.map(t => 
+        t.id === teamId 
+          ? { ...t, withdrawn: true, name: `${t.name} [WYCOFANA]` }
+          : t
+      ));
+    } 
+    // W innych fazach
+    else {
+      setTeams(teams.map(t => 
+        t.id === teamId 
+          ? { ...t, withdrawn: true, name: `${t.name} [WYCOFANA]` }
+          : t
+      ));
     }
 
     setShowTeamManagement(false);
