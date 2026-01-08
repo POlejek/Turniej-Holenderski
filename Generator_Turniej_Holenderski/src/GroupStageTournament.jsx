@@ -431,6 +431,60 @@ export default function GroupStageTournament() {
     setCurrentTier(1);
   };
 
+  // Sprawdzenie czy wszystkie mecze zakończone
+  const allTier1MatchesCompleted = () => {
+    return Object.values(tier1Results).every(r => r.completed);
+  };
+
+  const allTier2MatchesCompleted = () => {
+    return Object.values(tier2Results).every(r => r.completed);
+  };
+
+  const allFinalsCompleted = () => {
+    return allTier1MatchesCompleted() && allTier2MatchesCompleted();
+  };
+
+  // Generowanie klasyfikacji końcowej
+  const generateFinalRanking = () => {
+    const ranking = [];
+
+    // Najpierw wszystkie drużyny z I Ligi
+    tier1GroupsData.forEach((group, groupIndex) => {
+      const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
+      sorted.forEach((teamId, position) => {
+        const team = teams.find(t => t.id === teamId);
+        ranking.push({
+          ...team,
+          tier: 1,
+          groupName: group.name,
+          groupPosition: position + 1,
+          totalPoints: team.qualPoints + team.finalPoints,
+          totalGoalsFor: team.qualGoalsFor + team.finalGoalsFor,
+          totalGoalsAgainst: team.qualGoalsAgainst + team.finalGoalsAgainst,
+        });
+      });
+    });
+
+    // Potem wszystkie drużyny z II Ligi
+    tier2GroupsData.forEach((group, groupIndex) => {
+      const sorted = sortGroupTeams(group.teams, 'tier2', group.id);
+      sorted.forEach((teamId, position) => {
+        const team = teams.find(t => t.id === teamId);
+        ranking.push({
+          ...team,
+          tier: 2,
+          groupName: group.name,
+          groupPosition: position + 1,
+          totalPoints: team.qualPoints + team.finalPoints,
+          totalGoalsFor: team.qualGoalsFor + team.finalGoalsFor,
+          totalGoalsAgainst: team.qualGoalsAgainst + team.finalGoalsAgainst,
+        });
+      });
+    });
+
+    return ranking;
+  };
+
   const resetTournament = () => {
     if (window.confirm('Czy na pewno chcesz zresetować turniej?')) {
       localStorage.removeItem(STORAGE_KEY);
@@ -479,6 +533,19 @@ export default function GroupStageTournament() {
           csv += `${i+1},${team.name},${team.finalWins + team.finalDraws + team.finalLosses},${team.finalPoints},${team.finalGoalsFor}:${team.finalGoalsAgainst}\n`;
         });
       });
+
+      // Klasyfikacja końcowa
+      if (allFinalsCompleted()) {
+        csv += '\n\nKLASYFIKACJA KOŃCOWA\n';
+        csv += 'Miejsce,Drużyna,Liga,Grupa,Pozycja w grupie,Pkt finałowe,Bramki finałowe,Bilans finałowy,Pkt łącznie,Bramki łącznie,Bilans łączny\n';
+        const finalRanking = generateFinalRanking();
+        finalRanking.forEach((team, index) => {
+          const tierName = team.tier === 1 ? 'I Liga' : 'II Liga';
+          const finalGD = team.finalGoalsFor - team.finalGoalsAgainst;
+          const totalGD = team.totalGoalsFor - team.totalGoalsAgainst;
+          csv += `${index + 1},${team.name},${tierName},${team.groupName},${team.groupPosition},${team.finalPoints},${team.finalGoalsFor}:${team.finalGoalsAgainst},${finalGD >= 0 ? '+' : ''}${finalGD},${team.totalPoints},${team.totalGoalsFor}:${team.totalGoalsAgainst},${totalGD >= 0 ? '+' : ''}${totalGD}\n`;
+        });
+      }
     }
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -486,6 +553,54 @@ export default function GroupStageTournament() {
     link.href = URL.createObjectURL(blob);
     link.download = 'turniej_grupowy.csv';
     link.click();
+  };
+
+  // Generowanie klasyfikacji końcowej
+  const getFinalRanking = () => {
+    const ranking = [];
+
+    // Najpierw I Liga - sortowana według grup
+    tier1GroupsData.forEach(group => {
+      const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
+      sorted.forEach((teamId, position) => {
+        const team = teams.find(t => t.id === teamId);
+        ranking.push({ ...team, tier: 1, groupPosition: position + 1, groupName: group.name });
+      });
+    });
+
+    // Potem II Liga - sortowana według grup
+    tier2GroupsData.forEach(group => {
+      const sorted = sortGroupTeams(group.teams, 'tier2', group.id);
+      sorted.forEach((teamId, position) => {
+        const team = teams.find(t => t.id === teamId);
+        ranking.push({ ...team, tier: 2, groupPosition: position + 1, groupName: group.name });
+      });
+    });
+
+    // Sortowanie międzygrupowe w obrębie każdej ligi
+    const tier1Teams = ranking.filter(t => t.tier === 1).sort((a, b) => {
+      // Najpierw według pozycji w grupie (1. miejsca, potem 2. miejsca itd.)
+      if (a.groupPosition !== b.groupPosition) return a.groupPosition - b.groupPosition;
+      // Przy równej pozycji - według punktów
+      if (b.finalPoints !== a.finalPoints) return b.finalPoints - a.finalPoints;
+      // Potem bilans
+      const aDiff = a.finalGoalsFor - a.finalGoalsAgainst;
+      const bDiff = b.finalGoalsFor - b.finalGoalsAgainst;
+      if (bDiff !== aDiff) return bDiff - aDiff;
+      // Na końcu bramki strzelone
+      return b.finalGoalsFor - a.finalGoalsFor;
+    });
+
+    const tier2Teams = ranking.filter(t => t.tier === 2).sort((a, b) => {
+      if (a.groupPosition !== b.groupPosition) return a.groupPosition - b.groupPosition;
+      if (b.finalPoints !== a.finalPoints) return b.finalPoints - a.finalPoints;
+      const aDiff = a.finalGoalsFor - a.finalGoalsAgainst;
+      const bDiff = b.finalGoalsFor - b.finalGoalsAgainst;
+      if (bDiff !== aDiff) return bDiff - aDiff;
+      return b.finalGoalsFor - a.finalGoalsFor;
+    });
+
+    return [...tier1Teams, ...tier2Teams];
   };
 
   const renderGroupTable = (groupTeams, phase, groupId) => {
@@ -963,6 +1078,11 @@ export default function GroupStageTournament() {
     const currentPhase = currentTier === 1 ? 'tier1' : 'tier2';
     const currentResults = currentTier === 1 ? tier1Results : tier2Results;
     const allMatchesCompleted = Object.values(currentResults).every(r => r.completed);
+    
+    // Sprawdź czy wszystkie mecze w obu ligach są zakończone
+    const allTier1Completed = Object.values(tier1Results).every(r => r.completed);
+    const allTier2Completed = Object.values(tier2Results).every(r => r.completed);
+    const allFinalsCompleted = allTier1Completed && allTier2Completed;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 p-4">
@@ -1053,13 +1173,117 @@ export default function GroupStageTournament() {
           </div>
 
           {allMatchesCompleted && (
-            <div className="bg-white rounded-xl shadow-xl p-6">
+            <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <Award className="text-yellow-500" />
                 {currentTier === 1 ? 'I Liga - Zakończona' : 'II Liga - Zakończona'}
               </h2>
               <div className="text-center text-green-600 font-semibold text-lg">
                 Wszystkie mecze rozegrane! Zobacz tabele powyżej.
+              </div>
+            </div>
+          )}
+
+          {allFinalsCompleted && (
+            <div className="bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl shadow-2xl p-8 mb-6">
+              <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center flex items-center justify-center gap-3">
+                <Trophy className="text-yellow-500" size={36} />
+                KLASYFIKACJA KOŃCOWA
+                <Trophy className="text-yellow-500" size={36} />
+              </h2>
+              
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gradient-to-r from-yellow-400 to-orange-400 text-white">
+                      <tr>
+                        <th className="p-3 text-left font-bold">Miejsce</th>
+                        <th className="p-3 text-left font-bold">Drużyna</th>
+                        <th className="p-3 text-center font-bold">Liga</th>
+                        <th className="p-3 text-center font-bold">Gr.</th>
+                        <th className="p-3 text-center font-bold">Poz.</th>
+                        <th className="p-3 text-center font-bold">M</th>
+                        <th className="p-3 text-center font-bold">Pkt</th>
+                        <th className="p-3 text-center font-bold">Bramki</th>
+                        <th className="p-3 text-center font-bold">Bilans</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {generateFinalRanking().map((team, index) => {
+                        let bgColor = 'bg-white';
+                        let medalIcon = null;
+                        
+                        if (index === 0) {
+                          bgColor = 'bg-yellow-100 border-l-4 border-yellow-500';
+                          medalIcon = <span className="text-2xl">🥇</span>;
+                        } else if (index === 1) {
+                          bgColor = 'bg-gray-100 border-l-4 border-gray-400';
+                          medalIcon = <span className="text-2xl">🥈</span>;
+                        } else if (index === 2) {
+                          bgColor = 'bg-orange-100 border-l-4 border-orange-500';
+                          medalIcon = <span className="text-2xl">🥉</span>;
+                        } else if (team.tier === 1) {
+                          bgColor = 'bg-blue-50';
+                        }
+
+                        return (
+                          <tr key={team.id} className={`${bgColor} border-b hover:bg-opacity-75 transition`}>
+                            <td className="p-3 font-bold text-lg">
+                              <div className="flex items-center gap-2">
+                                {medalIcon}
+                                <span>{index + 1}</span>
+                              </div>
+                            </td>
+                            <td className="p-3 font-semibold">{team.name}</td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                team.tier === 1 
+                                  ? 'bg-yellow-200 text-yellow-800' 
+                                  : 'bg-gray-200 text-gray-700'
+                              }`}>
+                                {team.tier === 1 ? 'I' : 'II'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center text-sm">{team.groupName}</td>
+                            <td className="p-3 text-center font-semibold">{team.groupPosition}</td>
+                            <td className="p-3 text-center">{team.finalWins + team.finalDraws + team.finalLosses}</td>
+                            <td className="p-3 text-center font-bold text-blue-600">{team.finalPoints}</td>
+                            <td className="p-3 text-center">{team.finalGoalsFor}:{team.finalGoalsAgainst}</td>
+                            <td className="p-3 text-center font-semibold">
+                              <span className={team.finalGoalsFor - team.finalGoalsAgainst >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                {team.finalGoalsFor - team.finalGoalsAgainst >= 0 ? '+' : ''}{team.finalGoalsFor - team.finalGoalsAgainst}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-4 text-center">
+                  <div className="text-3xl mb-2">🥇</div>
+                  <div className="font-bold text-lg">{generateFinalRanking()[0]?.name}</div>
+                  <div className="text-sm text-gray-600">Zwycięzca turnieju</div>
+                </div>
+                <div className="bg-gray-100 border-2 border-gray-400 rounded-lg p-4 text-center">
+                  <div className="text-3xl mb-2">🥈</div>
+                  <div className="font-bold text-lg">{generateFinalRanking()[1]?.name}</div>
+                  <div className="text-sm text-gray-600">2. miejsce</div>
+                </div>
+                <div className="bg-orange-100 border-2 border-orange-400 rounded-lg p-4 text-center">
+                  <div className="text-3xl mb-2">🥉</div>
+                  <div className="font-bold text-lg">{generateFinalRanking()[2]?.name}</div>
+                  <div className="text-sm text-gray-600">3. miejsce</div>
+                </div>
+              </div>
+
+              <div className="mt-6 text-center text-sm text-gray-600">
+                <p><strong>Legenda:</strong></p>
+                <p>Gr. = Grupa w finale | Poz. = Pozycja w grupie | M = Mecze | Pkt = Punkty</p>
+                <p className="mt-2">Klasyfikacja: 1. miejsca z I Ligi → 2. miejsca z I Ligi → ... → 1. miejsca z II Ligi → ...</p>
               </div>
             </div>
           )}
