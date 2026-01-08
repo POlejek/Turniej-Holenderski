@@ -51,6 +51,9 @@ export default function GroupTournament() {
   // UI
   const [showStandings, setShowStandings] = useState(false);
   const [selectedRound, setSelectedRound] = useState(0);
+  const [showTeamManagement, setShowTeamManagement] = useState(false);
+  const [editingTeam, setEditingTeam] = useState(null);
+  const [editingTeamName, setEditingTeamName] = useState('');
   
   const saveTimeoutRef = useRef(null);
 
@@ -180,6 +183,93 @@ export default function GroupTournament() {
 
   const toggleTeamExpanded = (teamId) => {
     setExpandedTeams(prev => ({ ...prev, [teamId]: !prev[teamId] }));
+  };
+
+  // Wycofanie drużyny z turnieju
+  const withdrawTeam = (teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    if (!window.confirm(`Czy na pewno chcesz wycofać drużynę "${team.name}" z turnieju? Wszystkie ich mecze zostaną uznane za walkowery dla przeciwników.`)) {
+      return;
+    }
+
+    // Oznacz drużynę jako wycofaną
+    setTeams(teams.map(t => 
+      t.id === teamId 
+        ? { ...t, withdrawn: true, name: `${t.name} [WYCOFANA]` }
+        : t
+    ));
+
+    // Automatyczne walkowery dla wszystkich przyszłych i bieżących meczów
+    // W fazie Swiss
+    if (step === 3 && swissMatches.length > 0) {
+      const updatedResults = { ...swissResults };
+      
+      swissMatches.forEach((round, roundIndex) => {
+        round.forEach(match => {
+          if ((match.teamA === teamId || match.teamB === teamId) && !updatedResults[match.id]) {
+            // Ustaw walkower dla przeciwnika
+            if (match.isBye) {
+              updatedResults[match.id] = {
+                scoreA: 0,
+                scoreB: 0,
+                completed: true
+              };
+            } else {
+              const opponentWins = match.teamA === teamId ? 'B' : 'A';
+              updatedResults[match.id] = {
+                scoreA: opponentWins === 'A' ? 3 : 0,
+                scoreB: opponentWins === 'B' ? 3 : 0,
+                completed: true
+              };
+            }
+          }
+        });
+      });
+      
+      setSwissResults(updatedResults);
+    }
+
+    // W fazie Playoff - przeciwnik automatycznie awansuje
+    if (step === 4 && playoffBracket.length > 0) {
+      const updatedResults = { ...playoffResults };
+      
+      playoffBracket.forEach(match => {
+        if ((match.teamA === teamId || match.teamB === teamId) && !updatedResults[match.id]) {
+          const winner = match.teamA === teamId ? match.teamB : match.teamA;
+          updatedResults[match.id] = {
+            scoreA: match.teamA === teamId ? 0 : 3,
+            scoreB: match.teamB === teamId ? 0 : 3,
+            winner: winner
+          };
+        }
+      });
+      
+      setPlayoffResults(updatedResults);
+    }
+
+    setShowTeamManagement(false);
+  };
+
+  // Edycja nazwy drużyny podczas turnieju
+  const startEditingTeam = (teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    if (team && !team.withdrawn) {
+      setEditingTeam(teamId);
+      setEditingTeamName(team.name);
+    }
+  };
+
+  const saveTeamName = () => {
+    if (editingTeam && editingTeamName.trim()) {
+      updateTeamName(editingTeam, editingTeamName);
+      setEditingTeam(null);
+      setEditingTeamName('');
+    }
+  };
+
+  const cancelEditingTeam = () => {
+    setEditingTeam(null);
+    setEditingTeamName('');
   };
 
   // Funkcja generowania parowań Swiss
@@ -698,6 +788,89 @@ export default function GroupTournament() {
     window.location.reload();
   };
 
+  // Modal zarządzania drużynami
+  const renderTeamManagementModal = () => {
+    if (!showTeamManagement) return null;
+
+    const activeTeams = teams.filter(t => !t.withdrawn);
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
+            <h3 className="text-xl font-bold text-purple-900">Zarządzanie drużynami</h3>
+            <button
+              onClick={() => setShowTeamManagement(false)}
+              className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="p-4 space-y-3">
+            {activeTeams.map(team => (
+              <div key={team.id} className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50">
+                {editingTeam === team.id ? (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={editingTeamName}
+                      onChange={(e) => setEditingTeamName(e.target.value)}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="Nazwa drużyny"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveTeamName}
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                      >
+                        Zapisz
+                      </button>
+                      <button
+                        onClick={cancelEditingTeam}
+                        className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                      >
+                        Anuluj
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-gray-800">{team.name}</h4>
+                      <p className="text-sm text-gray-600">
+                        Punkty Swiss: {team.swissPoints || 0} | Bramki: {team.goalsFor || 0}:{team.goalsAgainst || 0}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEditingTeam(team.id)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                      >
+                        Edytuj nazwę
+                      </button>
+                      <button
+                        onClick={() => withdrawTeam(team.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                      >
+                        Wycofaj
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            
+            {activeTeams.length === 0 && (
+              <p className="text-center text-gray-500 py-8">Brak aktywnych drużyn</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Renderowanie kroków
   const renderStep1 = () => (
     <div className="space-y-6">
@@ -912,13 +1085,22 @@ export default function GroupTournament() {
       <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-2xl font-bold text-purple-900">Faza Swiss</h2>
-          <button
-            onClick={() => setShowStandings(!showStandings)}
-            className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center gap-2"
-          >
-            <Trophy size={20} />
-            {showStandings ? 'Ukryj tabelę' : 'Pokaż tabelę'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowStandings(!showStandings)}
+              className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center gap-2"
+            >
+              <Trophy size={20} />
+              {showStandings ? 'Ukryj tabelę' : 'Pokaż tabelę'}
+            </button>
+            <button
+              onClick={() => setShowTeamManagement(true)}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center gap-2"
+            >
+              <Users size={20} />
+              Zarządzaj drużynami
+            </button>
+          </div>
         </div>
 
         {/* Tabela Swiss */}
@@ -943,9 +1125,11 @@ export default function GroupTournament() {
                 </thead>
                 <tbody>
                   {standings.map((team, i) => (
-                    <tr key={team.id} className={i < parseInt(playoffTopN) ? 'bg-green-50' : ''}>
+                    <tr key={team.id} className={`${i < parseInt(playoffTopN) ? 'bg-green-50' : ''} ${team.withdrawn ? 'opacity-50' : ''}`}>
                       <td className="px-2 py-2">{i + 1}</td>
-                      <td className="px-2 py-2 font-semibold">{team.name}</td>
+                      <td className={`px-2 py-2 font-semibold ${team.withdrawn ? 'text-red-500 line-through' : ''}`}>
+                        {team.name}
+                      </td>
                       <td className="px-2 py-2 text-center font-bold">{team.swissPoints || 0}</td>
                       <td className="px-2 py-2 text-center">{(team.wins || 0) + (team.draws || 0) + (team.losses || 0)}</td>
                       <td className="px-2 py-2 text-center">{team.wins || 0}</td>
@@ -996,13 +1180,15 @@ export default function GroupTournament() {
                   <div key={match.id} className={`p-3 rounded-lg ${match.isRematch ? 'bg-yellow-50 border border-yellow-300' : 'bg-gradient-to-r from-purple-50 to-pink-50'}`}>
                     {match.isBye ? (
                       <div className="text-center">
-                        <span className="font-semibold text-gray-800">{teamA?.name}</span>
+                        <span className={`font-semibold ${teamA?.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
+                          {teamA?.name}
+                        </span>
                         <span className="ml-2 text-sm text-gray-600">(BYE - walkower)</span>
                       </div>
                     ) : (
                       <>
                         <div className="flex items-center justify-between gap-4">
-                          <div className="flex-1 text-right font-semibold text-gray-800">
+                          <div className={`flex-1 text-right font-semibold ${teamA?.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
                             {teamA?.name || '?'}
                           </div>
                           <div className="flex items-center gap-2">
@@ -1011,7 +1197,7 @@ export default function GroupTournament() {
                               min="0"
                               value={result.scoreA ?? ''}
                               onChange={(e) => updateSwissScore(match.id, 'scoreA', e.target.value)}
-                              disabled={result.completed}
+                              disabled={result.completed || teamA?.withdrawn || teamB?.withdrawn}
                               className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 disabled:bg-gray-200"
                             />
                             <span className="font-bold text-gray-600">:</span>
@@ -1020,11 +1206,11 @@ export default function GroupTournament() {
                               min="0"
                               value={result.scoreB ?? ''}
                               onChange={(e) => updateSwissScore(match.id, 'scoreB', e.target.value)}
-                              disabled={result.completed}
+                              disabled={result.completed || teamA?.withdrawn || teamB?.withdrawn}
                               className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 disabled:bg-gray-200"
                             />
                           </div>
-                          <div className="flex-1 text-left font-semibold text-gray-800">
+                          <div className={`flex-1 text-left font-semibold ${teamB?.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
                             {teamB?.name || '?'}
                           </div>
                         </div>
@@ -1099,14 +1285,23 @@ export default function GroupTournament() {
     
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-2xl font-bold text-purple-900">Faza Playoff</h2>
-          {championTeam && (
-            <div className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-4 py-2 rounded-lg">
-              <Trophy size={24} />
-              <span className="font-bold">Zwycięzca: {championTeam.name}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {championTeam && (
+              <div className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-4 py-2 rounded-lg">
+                <Trophy size={24} />
+                <span className="font-bold">Zwycięzca: {championTeam.name}</span>
+              </div>
+            )}
+            <button
+              onClick={() => setShowTeamManagement(true)}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center gap-2"
+            >
+              <Users size={20} />
+              Zarządzaj drużynami
+            </button>
+          </div>
         </div>
 
         <div className="space-y-8">
@@ -1127,7 +1322,7 @@ export default function GroupTournament() {
                         <>
                           <div className="flex items-center justify-between gap-4 mb-3">
                             <div className="flex-1 text-right">
-                              <span className={`font-semibold ${match.winner === teamA.id ? 'text-green-600' : 'text-gray-800'}`}>
+                              <span className={`font-semibold ${match.winner === teamA.id ? 'text-green-600' : teamA.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
                                 {teamA.name}
                               </span>
                             </div>
@@ -1137,7 +1332,7 @@ export default function GroupTournament() {
                                 min="0"
                                 value={result.scoreA ?? ''}
                                 onChange={(e) => updatePlayoffScore(match.id, 'scoreA', e.target.value)}
-                                disabled={!!match.winner}
+                                disabled={!!match.winner || teamA.withdrawn || teamB.withdrawn}
                                 className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 disabled:bg-gray-200"
                               />
                               <span className="font-bold text-gray-600">:</span>
@@ -1146,12 +1341,12 @@ export default function GroupTournament() {
                                 min="0"
                                 value={result.scoreB ?? ''}
                                 onChange={(e) => updatePlayoffScore(match.id, 'scoreB', e.target.value)}
-                                disabled={!!match.winner}
+                                disabled={!!match.winner || teamA.withdrawn || teamB.withdrawn}
                                 className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 disabled:bg-gray-200"
                               />
                             </div>
                             <div className="flex-1 text-left">
-                              <span className={`font-semibold ${match.winner === teamB.id ? 'text-green-600' : 'text-gray-800'}`}>
+                              <span className={`font-semibold ${match.winner === teamB.id ? 'text-green-600' : teamB.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
                                 {teamB.name}
                               </span>
                             </div>
@@ -1291,6 +1486,9 @@ export default function GroupTournament() {
           {step === 4 && renderStep4()}
         </div>
       </div>
+      
+      {/* Modal zarządzania drużynami */}
+      {renderTeamManagementModal()}
     </div>
   );
 }
