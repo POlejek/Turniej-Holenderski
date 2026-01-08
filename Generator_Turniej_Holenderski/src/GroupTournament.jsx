@@ -793,13 +793,24 @@ export default function GroupTournament() {
         </div>
       </div>
 
-      <button
-        onClick={initializeTeams}
-        disabled={parseInt(numTeams) < 4 || parseInt(swissRounds) < 1}
-        className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
-      >
-        Dalej <ArrowRight className="inline ml-2" size={20} />
-      </button>
+      <div className="flex gap-4">
+        <button
+          onClick={initializeTeams}
+          disabled={parseInt(numTeams) < 4 || parseInt(swissRounds) < 1}
+          className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+        >
+          Dalej <ArrowRight size={20} />
+        </button>
+        {teams.length > 0 && (
+          <button
+            onClick={resetTournament}
+            className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={20} />
+            Reset
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -873,12 +884,21 @@ export default function GroupTournament() {
         ))}
       </div>
 
-      <button
-        onClick={startSwissPhase}
-        className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
-      >
-        Rozpocznij fazę Swiss <ArrowRight className="inline ml-2" size={20} />
-      </button>
+      <div className="flex gap-4">
+        <button
+          onClick={startSwissPhase}
+          className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+        >
+          Rozpocznij fazę Swiss <ArrowRight size={20} />
+        </button>
+        <button
+          onClick={resetTournament}
+          className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+        >
+          <RefreshCw size={20} />
+          Reset
+        </button>
+      </div>
     </div>
   );
 
@@ -1041,11 +1061,31 @@ export default function GroupTournament() {
 
         {/* Przycisk do playoff */}
         {currentSwissRound >= totalRounds && currentRound.length > 0 && swissResults[currentRound[currentRound.length - 1]?.id]?.completed && (
+          <div className="flex gap-4">
+            <button
+              onClick={generatePlayoffPhase}
+              className="flex-1 bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+            >
+              Zakończ fazę Swiss i generuj Playoff <ArrowRight size={20} />
+            </button>
+            <button
+              onClick={resetTournament}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+            >
+              <RefreshCw size={20} />
+              Reset
+            </button>
+          </div>
+        )}
+        
+        {/* Przycisk Reset dostępny zawsze w fazie Swiss */}
+        {!(currentSwissRound >= totalRounds && currentRound.length > 0 && swissResults[currentRound[currentRound.length - 1]?.id]?.completed) && (
           <button
-            onClick={generatePlayoffPhase}
-            className="w-full bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
+            onClick={resetTournament}
+            className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
           >
-            Zakończ fazę Swiss i generuj Playoff <ArrowRight className="inline ml-2" size={20} />
+            <RefreshCw size={20} />
+            Reset Turnieju
           </button>
         )}
       </div>
@@ -1055,6 +1095,7 @@ export default function GroupTournament() {
   const renderStep4 = () => {
     const champion = finalRanking.find(r => r.place === 1);
     const championTeam = champion ? teams.find(t => t.id === champion.teamId) : null;
+    const hasUnfinishedMatches = playoffBracket.some(m => !playoffResults[m.id]);
     
     return (
       <div className="space-y-6">
@@ -1141,6 +1182,17 @@ export default function GroupTournament() {
             </div>
           ))}
         </div>
+        
+        {/* Przycisk Reset dostępny podczas Playoff */}
+        {hasUnfinishedMatches && (
+          <button
+            onClick={resetTournament}
+            className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={20} />
+            Reset Turnieju
+          </button>
+        )}
 
         {/* Ranking końcowy */}
         {finalRanking.length > 0 && (
@@ -1185,7 +1237,7 @@ export default function GroupTournament() {
           </button>
           <button
             onClick={resetTournament}
-            className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+            className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2"
           >
             <RefreshCw size={20} />
             Nowy turniej
