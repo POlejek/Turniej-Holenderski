@@ -755,15 +755,100 @@ export default function GroupTournament() {
 
   // Obliczanie tabeli Swiss
   const calculateSwissStandings = () => {
-    return [...teams]
-      .filter(t => !t.withdrawn) // Pomijamy wycofane drużyny
-      .sort((a, b) => {
-        if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
-        const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
-        const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
-        if (bDiff !== aDiff) return bDiff - aDiff;
-        return (b.goalsFor || 0) - (a.goalsFor || 0);
+    const activeTeams = [...teams].filter(t => !t.withdrawn);
+    
+    // Funkcja pomocnicza do sprawdzenia bezpośrednich meczów
+    const getHeadToHeadResult = (teamA, teamB) => {
+      let teamAPoints = 0;
+      let teamBPoints = 0;
+      let teamAGoalsFor = 0;
+      let teamAGoalsAgainst = 0;
+      let teamBGoalsFor = 0;
+      let teamBGoalsAgainst = 0;
+      let matchesPlayed = 0;
+
+      // Sprawdź wszystkie rundy
+      swissMatches.forEach(round => {
+        round.forEach(match => {
+          const result = swissResults[match.id];
+          if (!result?.completed || match.isBye) return;
+
+          // Sprawdź czy to mecz między tymi drużynami
+          if ((match.teamA === teamA.id && match.teamB === teamB.id) ||
+              (match.teamA === teamB.id && match.teamB === teamA.id)) {
+            matchesPlayed++;
+            
+            const scoreA = parseInt(result.scoreA);
+            const scoreB = parseInt(result.scoreB);
+            
+            if (match.teamA === teamA.id) {
+              teamAGoalsFor += scoreA;
+              teamAGoalsAgainst += scoreB;
+              teamBGoalsFor += scoreB;
+              teamBGoalsAgainst += scoreA;
+              
+              if (scoreA > scoreB) teamAPoints += pointsWin;
+              else if (scoreA === scoreB) {
+                teamAPoints += pointsDraw;
+                teamBPoints += pointsDraw;
+              } else teamBPoints += pointsWin;
+            } else {
+              teamBGoalsFor += scoreA;
+              teamBGoalsAgainst += scoreB;
+              teamAGoalsFor += scoreB;
+              teamAGoalsAgainst += scoreA;
+              
+              if (scoreA > scoreB) teamBPoints += pointsWin;
+              else if (scoreA === scoreB) {
+                teamAPoints += pointsDraw;
+                teamBPoints += pointsDraw;
+              } else teamAPoints += pointsWin;
+            }
+          }
+        });
       });
+
+      if (matchesPlayed === 0) return null;
+
+      return {
+        teamAPoints,
+        teamBPoints,
+        teamAGoalDiff: teamAGoalsFor - teamAGoalsAgainst,
+        teamBGoalDiff: teamBGoalsFor - teamBGoalsAgainst,
+        teamAGoalsFor,
+        teamBGoalsFor
+      };
+    };
+
+    return activeTeams.sort((a, b) => {
+      // 1. Punkty
+      if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
+      
+      // 2. Bezpośredni mecz (jeśli się odbył)
+      const headToHead = getHeadToHeadResult(a, b);
+      if (headToHead) {
+        // Porównaj punkty z bezpośrednich meczów
+        if (headToHead.teamAPoints !== headToHead.teamBPoints) {
+          return headToHead.teamBPoints - headToHead.teamAPoints;
+        }
+        // Jeśli punkty równe, porównaj bilans z bezpośrednich meczów
+        if (headToHead.teamAGoalDiff !== headToHead.teamBGoalDiff) {
+          return headToHead.teamBGoalDiff - headToHead.teamAGoalDiff;
+        }
+        // Jeśli bilans równy, porównaj bramki strzelone w bezpośrednich meczach
+        if (headToHead.teamAGoalsFor !== headToHead.teamBGoalsFor) {
+          return headToHead.teamBGoalsFor - headToHead.teamAGoalsFor;
+        }
+      }
+      
+      // 3. Bilans bramek (ogólny)
+      const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
+      const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
+      if (bDiff !== aDiff) return bDiff - aDiff;
+      
+      // 4. Bramki strzelone (ogólne)
+      return (b.goalsFor || 0) - (a.goalsFor || 0);
+    });
   };
 
   // Generowanie fazy playoff
