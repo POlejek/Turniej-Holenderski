@@ -300,6 +300,118 @@ export default function GroupTournament() {
     setShowTeamManagement(false);
   };
 
+  // Przywrócenie wycofanej drużyny
+  const restoreTeam = (teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    if (!team || !team.withdrawn) return;
+    
+    if (!window.confirm(`Czy na pewno chcesz przywrócić drużynę? Walkowery przyznane przeciwnikom zostaną anulowane.`)) {
+      return;
+    }
+
+    // Przywróć oryginalną nazwę (usuń "[WYCOFANA]")
+    const originalName = team.name.replace(' [WYCOFANA]', '');
+
+    // W fazie Swiss
+    if (step === 3 && swissMatches.length > 0) {
+      const updatedResults = { ...swissResults };
+      
+      // Znajdź wszystkie mecze wycofanej drużyny i cofnij walkowery
+      swissMatches.forEach((round) => {
+        round.forEach(match => {
+          if ((match.teamA === teamId || match.teamB === teamId)) {
+            const result = updatedResults[match.id];
+            // Jeśli to był walkower (3:0), usuń wynik
+            if (result && result.completed && 
+                ((result.scoreA === 3 && result.scoreB === 0) || 
+                 (result.scoreA === 0 && result.scoreB === 3))) {
+              updatedResults[match.id] = {
+                scoreA: '',
+                scoreB: '',
+                completed: false
+              };
+            }
+          }
+        });
+      });
+      
+      setSwissResults(updatedResults);
+      
+      // Zaktualizuj statystyki drużyn - usuń punkty za walkowery
+      const updatedTeams = teams.map(t => {
+        if (t.id === teamId) {
+          return { ...t, withdrawn: false, name: originalName };
+        }
+        
+        const teamData = { ...t };
+        
+        // Znajdź mecze przeciwko wycofanej drużynie i cofnij statystyki walkowerów
+        swissMatches.forEach((round) => {
+          round.forEach(match => {
+            if (!match.isBye && (match.teamA === teamId || match.teamB === teamId)) {
+              const isOpponent = (match.teamA === t.id || match.teamB === t.id);
+              const result = updatedResults[match.id];
+              
+              // Jeśli to był walkower i nie ma wyniku teraz
+              if (isOpponent && result && !result.completed && result.scoreA === '' && result.scoreB === '') {
+                const opponentId = match.teamA === t.id ? match.teamB : match.teamA;
+                
+                // Usuń tego przeciwnika z listy jeśli był tylko walkower
+                if (teamData.swissOpponents?.includes(opponentId)) {
+                  // Cofnij statystyki za walkower
+                  teamData.goalsFor = Math.max(0, (teamData.goalsFor || 0) - 3);
+                  teamData.swissPoints = Math.max(0, (teamData.swissPoints || 0) - pointsWin);
+                  teamData.wins = Math.max(0, (teamData.wins || 0) - 1);
+                  
+                  // Usuń z listy przeciwników
+                  teamData.swissOpponents = teamData.swissOpponents.filter(id => id !== opponentId);
+                }
+              }
+            }
+          });
+        });
+        
+        return teamData;
+      });
+      
+      setTeams(updatedTeams);
+    }
+    // W fazie Playoff
+    else if (step === 4 && playoffBracket.length > 0) {
+      const updatedResults = { ...playoffResults };
+      
+      playoffBracket.forEach(match => {
+        if ((match.teamA === teamId || match.teamB === teamId)) {
+          const result = updatedResults[match.id];
+          // Jeśli to był walkower, usuń wynik
+          if (result && result.winner && 
+              ((result.scoreA === 3 && result.scoreB === 0) || 
+               (result.scoreA === 0 && result.scoreB === 3))) {
+            delete updatedResults[match.id];
+          }
+        }
+      });
+      
+      setPlayoffResults(updatedResults);
+      
+      setTeams(teams.map(t => 
+        t.id === teamId 
+          ? { ...t, withdrawn: false, name: originalName }
+          : t
+      ));
+    }
+    // W innych fazach
+    else {
+      setTeams(teams.map(t => 
+        t.id === teamId 
+          ? { ...t, withdrawn: false, name: originalName }
+          : t
+      ));
+    }
+
+    setShowTeamManagement(false);
+  };
+
   // Edycja nazwy drużyny podczas turnieju
   const startEditingTeam = (teamId) => {
     const team = teams.find(t => t.id === teamId);
@@ -930,6 +1042,7 @@ export default function GroupTournament() {
     if (!showTeamManagement) return null;
 
     const activeTeams = teams.filter(t => !t.withdrawn);
+    const withdrawnTeams = teams.filter(t => t.withdrawn);
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -944,63 +1057,96 @@ export default function GroupTournament() {
             </button>
           </div>
           
-          <div className="p-4 space-y-3">
-            {activeTeams.map(team => (
-              <div key={team.id} className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50">
-                {editingTeam === team.id ? (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={editingTeamName}
-                      onChange={(e) => setEditingTeamName(e.target.value)}
-                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                      placeholder="Nazwa drużyny"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={saveTeamName}
-                        className="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
-                      >
-                        Zapisz
-                      </button>
-                      <button
-                        onClick={cancelEditingTeam}
-                        className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
-                      >
-                        Anuluj
-                      </button>
-                    </div>
+          <div className="p-4 space-y-4">
+            {/* Aktywne drużyny */}
+            <div>
+              <h4 className="text-lg font-bold text-gray-800 mb-3">Aktywne drużyny</h4>
+              <div className="space-y-3">
+                {activeTeams.map(team => (
+                  <div key={team.id} className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50">
+                    {editingTeam === team.id ? (
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={editingTeamName}
+                          onChange={(e) => setEditingTeamName(e.target.value)}
+                          className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          placeholder="Nazwa drużyny"
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={saveTeamName}
+                            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                          >
+                            Zapisz
+                          </button>
+                          <button
+                            onClick={cancelEditingTeam}
+                            className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                          >
+                            Anuluj
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-gray-800">{team.name}</h4>
+                          <p className="text-sm text-gray-600">
+                            Punkty Swiss: {team.swissPoints || 0} | Bramki: {team.goalsFor || 0}:{team.goalsAgainst || 0}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEditingTeam(team.id)}
+                            className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                          >
+                            Edytuj nazwę
+                          </button>
+                          <button
+                            onClick={() => withdrawTeam(team.id)}
+                            className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                          >
+                            Wycofaj
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-gray-800">{team.name}</h4>
-                      <p className="text-sm text-gray-600">
-                        Punkty Swiss: {team.swissPoints || 0} | Bramki: {team.goalsFor || 0}:{team.goalsAgainst || 0}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => startEditingTeam(team.id)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
-                      >
-                        Edytuj nazwę
-                      </button>
-                      <button
-                        onClick={() => withdrawTeam(team.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
-                      >
-                        Wycofaj
-                      </button>
-                    </div>
-                  </div>
+                ))}
+                
+                {activeTeams.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">Brak aktywnych drużyn</p>
                 )}
               </div>
-            ))}
-            
-            {activeTeams.length === 0 && (
-              <p className="text-center text-gray-500 py-8">Brak aktywnych drużyn</p>
+            </div>
+
+            {/* Wycofane drużyny */}
+            {withdrawnTeams.length > 0 && (
+              <div>
+                <h4 className="text-lg font-bold text-red-700 mb-3">Wycofane drużyny</h4>
+                <div className="space-y-3">
+                  {withdrawnTeams.map(team => (
+                    <div key={team.id} className="border border-red-300 bg-red-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-red-700 line-through">{team.name}</h4>
+                          <p className="text-sm text-gray-600">
+                            Punkty Swiss: {team.swissPoints || 0} | Bramki: {team.goalsFor || 0}:{team.goalsAgainst || 0}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => restoreTeam(team.id)}
+                          className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                        >
+                          Przywróć
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
