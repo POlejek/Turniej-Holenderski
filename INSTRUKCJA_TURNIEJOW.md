@@ -2,8 +2,8 @@
 
 ## Spis treści
 1. [Turniej "Każdy z Każdym"](#turniej-każdy-z-każdym)
-2. [Turniej Holenderski (Swiss System)](#turniej-holenderski-swiss-system)
-3. [Turniej Grupowy (Swiss + Playoff)](#turniej-grupowy-swiss--playoff)
+2. [Turniej Szwajcarski (Swiss System)](#turniej-szwajcarski-swiss-system)
+3. [Turniej Grupowy (Przechodzenie wyników)](#turniej-grupowy-przechodzenie-wyników)
 4. [Metodologia sortowania](#metodologia-sortowania)
 
 ---
@@ -49,10 +49,10 @@ Turniej w systemie "Każdy z Każdym" (Round-Robin) to format, w którym każda 
 
 ---
 
-## Turniej Holenderski (Swiss System)
+## Turniej Szwajcarski (Swiss System)
 
 ### Opis
-System szwajcarski to format, w którym drużyny nie grają ze wszystkimi, ale są parowane na podstawie aktualnej pozycji w tabeli. Drużyny z podobną liczbą punktów grają ze sobą.
+System szwajcarski to format, w którym drużyny nie grają ze wszystkimi, ale są parowane na podstawie aktualnej pozycji w tabeli. Drużyny z podobną liczbą punktów grają ze sobą. Po fazie grupowej następuje faza playoff.
 
 ### Jak działa?
 
@@ -61,6 +61,7 @@ System szwajcarski to format, w którym drużyny nie grają ze wszystkimi, ale s
 - **Liczba rund Swiss** - zwykle log₂(liczba drużyn), np.:
   - 8 drużyn → 3-4 rundy
   - 16 drużyn → 4-5 rund
+- **Drużyny w playoff** - musi być potęgą 2 (2, 4, 8, 16)
 - **Punktacja**:
   - Wygrana (domyślnie 3)
   - Remis (domyślnie 1)
@@ -86,33 +87,9 @@ System szwajcarski to format, w którym drużyny nie grają ze wszystkimi, ale s
 
 #### Krok 4: Tabela końcowa
 - Po wszystkich rundach Swiss generowana jest klasyfikacja
-- Najlepsze drużyny kwalifikują się do fazy finałowej
+- Najlepsze drużyny kwalifikują się do fazy playoff
 
-### Funkcje specjalne
-- **Wycofanie drużyny** - automatyczne walkowery 3:0 dla przeciwników
-- **Przywrócenie drużyny** - możliwość uzupełnienia wyników
-- **Reset** - cofnij do wybranego etapu
-
----
-
-## Turniej Grupowy (Swiss + Playoff)
-
-### Opis
-Kombinacja systemu szwajcarskiego z fazą pucharową (playoff). Najlepsze drużyny z fazy Swiss awansują do drabinki playoff.
-
-### Jak działa?
-
-#### FAZA 1: Swiss System
-- Działa identycznie jak w "Turniej Holenderski"
-- Wszystkie drużyny grają określoną liczbę rund
-- Zbierają punkty i statystyki
-
-#### FAZA 2: Playoff
-**Ustawienia:**
-- **Liczba drużyn w playoff** - musi być potęgą 2 (2, 4, 8, 16)
-- Najlepsze drużyny z tabeli Swiss awansują
-
-**Drabinka playoff:**
+#### Krok 5: Faza Playoff
 - **Parowanie według miejsc:**
   - 1. miejsce vs ostatnie miejsce kwalifikujące
   - 2. miejsce vs przedostatnie
@@ -125,15 +102,101 @@ Kombinacja systemu szwajcarskiego z fazą pucharową (playoff). Najlepsze druży
   - Finał
   - Mecz o 3. miejsce (opcjonalnie)
 
-**Wizualizacja:**
-- Drabinka pokazuje awans zwycięzców
-- Oznaczenie miejsc kwalifikacyjnych w tabeli Swiss (zielone tło)
+### Funkcje specjalne
+- **Wycofanie drużyny** - automatyczne walkowery 3:0 dla przeciwników
+- **Przywrócenie drużyny** - możliwość uzupełnienia wyników
+- **Eksport CSV** - pełne dane turnieju
+- **Reset** - cofnij do wybranego etapu
+
+---
+
+## Turniej Grupowy (Przechodzenie wyników)
+
+### Opis
+System grupowy z dwoma fazami: kwalifikacyjną i finałową. Drużyny grają najpierw w grupach kwalifikacyjnych (każdy z każdym), a następnie najlepsze awansują do grup finałowych. System wykorzystuje **przechodzenie wyników** - rezultaty z fazy kwalifikacyjnej są brane pod uwagę w klasyfikacji końcowej.
+
+### Jak działa?
+
+#### Krok 1: Ustawienia turnieju
+- **Liczba grup kwalifikacyjnych** (2-8)
+- **Drużyn w grupie kwalifikacyjnej** (3-8)
+- **Ile drużyn awansuje z grupy** (1 do n-1)
+- **Liczba grup finałowych** (1-4)
+- **Mecze między drużynami:**
+  - 1 mecz - każda para gra raz
+  - 2 mecze - rewanż (zamiana gospodarza)
+- **Punktacja:**
+  - Wygrana (domyślnie 3)
+  - Remis (domyślnie 1)
+
+#### Krok 2: Faza kwalifikacyjna
+**System "Każdy z Każdym" w grupach:**
+- Każda grupa gra osobno
+- W każdej grupie drużyny grają ze sobą raz lub dwa razy
+- System generuje tabele dla każdej grupy
+- Wprowadzasz wyniki meczów
+- Tabele sortowane według kryteriów klasyfikacji
+
+**Przykład:**
+```
+4 grupy × 4 drużyny = 16 drużyn
+Awansuje 2 z każdej grupy = 8 drużyn do finałów
+```
+
+#### Krok 3: Awans do finałów
+**Klucz rozstawienia - system "serpentyna" (snake draft):**
+- Zapewnia sprawiedliwy podział drużyn do grup finałowych
+- Unika sytuacji gdzie wszystkie najlepsze drużyny trafiają do jednej grupy
+
+**Przykład rozstawienia:**
+```
+Grupy kwalifikacyjne (po 2 awansują):
+Grupa A: 1. Team A1, 2. Team A2
+Grupa B: 1. Team B1, 2. Team B2
+Grupa C: 1. Team C1, 2. Team C2
+Grupa D: 1. Team D1, 2. Team D2
+
+Podział do 2 grup finałowych (serpentyna):
+Grupa Finałowa I:  Team A1, Team B2, Team C1, Team D2
+Grupa Finałowa II: Team A2, Team B1, Team C2, Team D1
+```
+
+#### Krok 4: Faza finałowa
+- Drużyny w nowych grupach grają ponownie "każdy z każdym"
+- **Ważne:** Statystyki z fazy kwalifikacyjnej są zachowane, ale nie wpływają na tabelę finałową
+- Każda grupa generuje swoją tabelę finałową
+- Zwycięzca grupy finałowej = najwyższe miejsce w turnieju
+
+### Przechodzenie wyników
+System przechowuje dwie osobne statystyki dla każdej drużyny:
+- **Statystyki kwalifikacyjne** - mecze z fazy grupowej
+- **Statystyki finałowe** - mecze z fazy finałowej
 
 ### Funkcje specjalne
-- **Wycofanie/przywrócenie drużyny** w fazie Swiss
-- **Edycja nazw drużyn**
-- **Eksport CSV** - pełne dane turnieju
-- **Reset** - cofnij do wybranego etapu (setup/Swiss/playoff)
+- **Zarządzanie drużynami** - edycja nazw w trakcie turnieju
+- **Eksport CSV** - pełny raport z obu faz
+- **Przełączanie między grupami** - szybki podgląd wszystkich grup
+- **Reset turnieju** - rozpocznij od nowa
+
+### Strategia organizacji
+
+**Dla małych turniejów (16-24 drużyn):**
+```
+4 grupy × 4 drużyny = 16 drużyn
+2 awansują z każdej → 2 grupy finałowe po 4
+```
+
+**Dla średnich turniejów (24-32 drużyn):**
+```
+6 grup × 4 drużyny = 24 drużyny
+2 awansują z każdej → 3 grupy finałowe po 4
+```
+
+**Dla dużych turniejów (32+ drużyn):**
+```
+8 grup × 4 drużyny = 32 drużyny
+2 awansują z każdej → 4 grupy finałowe po 4
+```
 
 ---
 
@@ -217,17 +280,20 @@ Drużyna B: bilans +5 (12 strzelonych, 7 straconych)
 - ✅ Każda drużyna gra ze wszystkimi
 - ❌ Długi dla dużych grup (np. 16 drużyn = 120 meczów przy rewanżach)
 
-### Turniej Swiss
+### Turniej Szwajcarski
 - ✅ Dobry dla dużych grup (8-32+ drużyn)
 - ✅ Znacznie mniej meczów niż "każdy z każdym"
 - ✅ Sprawiedliwy - silni grają z silnymi
+- ✅ Emocjonująca faza playoff
 - ❌ Nie wszystkie drużyny grają ze sobą
 
-### Turniej Grupowy (Swiss + Playoff)
-- ✅ Najlepszy dla turniejów mistrzowskich
-- ✅ Faza grupowa (Swiss) + emocje finałów (playoff)
-- ✅ Elastyczny - możesz dostosować liczbę rund i drużyn w playoff
+### Turniej Grupowy
+- ✅ Idealny dla turniejów 16-32+ drużyn
+- ✅ Każdy gra ze wszystkimi w swojej grupie (kwalifikacje i finały)
+- ✅ Sprawiedliwy system awansu (serpentyna)
+- ✅ Dwie fazy - każda drużyna ma szansę na poprawę
 - ⚠️ Wymaga więcej czasu niż sam Swiss
+- ⚠️ Najlepszy dla turniejów wielodniowych
 
 ---
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Users, Grid } from 'lucide-react';
+import { ArrowLeft, Users, Grid, Trophy } from 'lucide-react';
 import TournamentScheduler from './TournamentScheduler';
 import GroupTournament from './GroupTournament';
+import GroupStageTournament from './GroupStageTournament';
 
 export default function TeamTournamentMenu({ onBack }) {
   const [selectedMode, setSelectedMode] = useState(null);
@@ -21,7 +22,7 @@ export default function TeamTournamentMenu({ onBack }) {
     );
   }
 
-  if (selectedMode === 'group') {
+  if (selectedMode === 'swiss') {
     return (
       <div>
         <button
@@ -32,6 +33,21 @@ export default function TeamTournamentMenu({ onBack }) {
           Wstecz
         </button>
         <GroupTournament />
+      </div>
+    );
+  }
+
+  if (selectedMode === 'group-stage') {
+    return (
+      <div>
+        <button
+          onClick={() => setSelectedMode(null)}
+          className="fixed top-4 left-4 z-10 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-lg transition duration-200 flex items-center gap-2"
+        >
+          <ArrowLeft size={20} />
+          Wstecz
+        </button>
+        <GroupStageTournament />
       </div>
     );
   }
@@ -55,7 +71,7 @@ export default function TeamTournamentMenu({ onBack }) {
             Wybierz typ rozgrywek
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {/* Round Robin Tournament */}
             <button
               onClick={() => setSelectedMode('round-robin')}
@@ -79,9 +95,9 @@ export default function TeamTournamentMenu({ onBack }) {
               </div>
             </button>
 
-            {/* Group Tournament */}
+            {/* Swiss System Tournament */}
             <button
-              onClick={() => setSelectedMode('group')}
+              onClick={() => setSelectedMode('swiss')}
               className="group bg-gradient-to-br from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-xl sm:rounded-2xl p-6 sm:p-8 transition duration-300 transform hover:scale-105 shadow-xl"
             >
               <div className="flex flex-col items-center text-center space-y-4">
@@ -89,7 +105,7 @@ export default function TeamTournamentMenu({ onBack }) {
                   <Grid size={48} className="text-white" />
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold">
-                  Turniej Grupowy
+                  Turniej Szwajcarski
                 </h2>
                 <p className="text-sm sm:text-base text-purple-100">
                   System Swiss + Playoff
@@ -98,6 +114,29 @@ export default function TeamTournamentMenu({ onBack }) {
                   🔄 Parowanie wg punktów<br />
                   🏆 Play-off<br />
                   👑 Wielki finał
+                </div>
+              </div>
+            </button>
+
+            {/* Group Stage Tournament */}
+            <button
+              onClick={() => setSelectedMode('group-stage')}
+              className="group bg-gradient-to-br from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-xl sm:rounded-2xl p-6 sm:p-8 transition duration-300 transform hover:scale-105 shadow-xl"
+            >
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="bg-white/20 p-4 rounded-full">
+                  <Trophy size={48} className="text-white" />
+                </div>
+                <h2 className="text-xl sm:text-2xl font-bold">
+                  Turniej Grupowy
+                </h2>
+                <p className="text-sm sm:text-base text-orange-100">
+                  Grupy kwalifikacyjne → Grupy finałowe
+                </p>
+                <div className="pt-2 text-xs sm:text-sm text-orange-200">
+                  📋 Faza grupowa<br />
+                  ⬆️ Przechodzenie wyników<br />
+                  🎯 Faza finałowa
                 </div>
               </div>
             </button>
