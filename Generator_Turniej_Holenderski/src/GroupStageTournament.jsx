@@ -649,19 +649,19 @@ export default function GroupStageTournament() {
     const tier1PerGroup = Math.floor(tier1TotalTeams / numQualGroups);
 
     return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto -mx-2 sm:mx-0">
+        <table className="w-full text-xs sm:text-sm min-w-full">
           <thead className="bg-gray-100">
             <tr>
-              <th className="p-2 text-left">#</th>
-              <th className="p-2 text-left">Drużyna</th>
-              <th className="p-2 text-center">M</th>
-              <th className="p-2 text-center">W</th>
-              <th className="p-2 text-center">R</th>
-              <th className="p-2 text-center">P</th>
-              <th className="p-2 text-center">Bramki</th>
-              <th className="p-2 text-center">Bilans</th>
-              <th className="p-2 text-center font-bold">Pkt</th>
+              <th className="p-1 sm:p-2 text-left">#</th>
+              <th className="p-1 sm:p-2 text-left">Drużyna</th>
+              <th className="p-1 sm:p-2 text-center">M</th>
+              <th className="p-1 sm:p-2 text-center">W</th>
+              <th className="p-1 sm:p-2 text-center">R</th>
+              <th className="p-1 sm:p-2 text-center">P</th>
+              <th className="p-1 sm:p-2 text-center">Bramki</th>
+              <th className="p-1 sm:p-2 text-center">Bilans</th>
+              <th className="p-1 sm:p-2 text-center font-bold">Pkt</th>
             </tr>
           </thead>
           <tbody>
@@ -671,15 +671,15 @@ export default function GroupStageTournament() {
               
               return (
                 <tr key={team.id} className={`border-t ${isAdvancing ? 'bg-green-100' : ''}`}>
-                  <td className="p-2 font-semibold">{index + 1}</td>
-                  <td className="p-2">{team.name}</td>
-                  <td className="p-2 text-center">{team[`${prefix}Wins`] + team[`${prefix}Draws`] + team[`${prefix}Losses`]}</td>
-                  <td className="p-2 text-center">{team[`${prefix}Wins`]}</td>
-                  <td className="p-2 text-center">{team[`${prefix}Draws`]}</td>
-                  <td className="p-2 text-center">{team[`${prefix}Losses`]}</td>
-                  <td className="p-2 text-center">{team[`${prefix}GoalsFor`]}:{team[`${prefix}GoalsAgainst`]}</td>
-                  <td className="p-2 text-center">{team[`${prefix}GoalsFor`] - team[`${prefix}GoalsAgainst`]}</td>
-                  <td className="p-2 text-center font-bold">{team[`${prefix}Points`]}</td>
+                  <td className="p-1 sm:p-2 font-semibold">{index + 1}</td>
+                  <td className="p-1 sm:p-2 whitespace-nowrap">{team.name}</td>
+                  <td className="p-1 sm:p-2 text-center">{team[`${prefix}Wins`] + team[`${prefix}Draws`] + team[`${prefix}Losses`]}</td>
+                  <td className="p-1 sm:p-2 text-center">{team[`${prefix}Wins`]}</td>
+                  <td className="p-1 sm:p-2 text-center">{team[`${prefix}Draws`]}</td>
+                  <td className="p-1 sm:p-2 text-center">{team[`${prefix}Losses`]}</td>
+                  <td className="p-1 sm:p-2 text-center whitespace-nowrap">{team[`${prefix}GoalsFor`]}:{team[`${prefix}GoalsAgainst`]}</td>
+                  <td className="p-1 sm:p-2 text-center">{team[`${prefix}GoalsFor`] - team[`${prefix}GoalsAgainst`]}</td>
+                  <td className="p-1 sm:p-2 text-center font-bold">{team[`${prefix}Points`]}</td>
                 </tr>
               );
             })}
@@ -700,7 +700,7 @@ export default function GroupStageTournament() {
       <div className="space-y-4">
         {Array.from(new Set(groupMatches.map(m => m.round))).map(round => (
           <div key={round}>
-            <h4 className="font-semibold text-gray-700 mb-2">Runda {round}</h4>
+            <h4 className="font-semibold text-gray-700 mb-2 text-sm sm:text-base">Runda {round}</h4>
             <div className="space-y-2">
               {groupMatches.filter(m => m.round === round).map(match => {
                 const teamA = teams.find(t => t.id === match.teamA);
@@ -708,47 +708,52 @@ export default function GroupStageTournament() {
                 const result = results[match.id] || {};
 
                 return (
-                  <div key={match.id} className="bg-white border rounded-lg p-3">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 text-right font-semibold">{teamA?.name}</div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          value={result.scoreA ?? ''}
-                          onChange={(e) => updateResult(match.id, 'scoreA', e.target.value, phase)}
-                          disabled={result.completed}
-                          className="w-16 px-2 py-1 text-center border rounded disabled:bg-gray-100"
-                        />
-                        <span className="font-bold">:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={result.scoreB ?? ''}
-                          onChange={(e) => updateResult(match.id, 'scoreB', e.target.value, phase)}
-                          disabled={result.completed}
-                          className="w-16 px-2 py-1 text-center border rounded disabled:bg-gray-100"
-                        />
-                      </div>
-                      <div className="flex-1 text-left font-semibold">{teamB?.name}</div>
-                      {!result.completed ? (
-                        <button
-                          onClick={() => confirmMatch(match.id, phase)}
-                          className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
-                        >
-                          ✓
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <span className="text-green-600 px-3">✓</span>
-                          <button
-                            onClick={() => uncheckMatch(match.id, phase)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
-                          >
-                            <Edit2 size={14} /> Edytuj
-                          </button>
+                  <div key={match.id} className="bg-white border rounded-lg p-2 sm:p-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+                      <div className="flex items-center justify-between sm:flex-1 gap-2">
+                        <div className="flex-1 text-right font-semibold text-sm sm:text-base truncate">{teamA?.name}</div>
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={result.scoreA ?? ''}
+                            onChange={(e) => updateResult(match.id, 'scoreA', e.target.value, phase)}
+                            disabled={result.completed}
+                            className="w-12 sm:w-16 px-1 sm:px-2 py-1 text-center border rounded disabled:bg-gray-100 text-sm sm:text-base"
+                          />
+                          <span className="font-bold text-sm sm:text-base">:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={result.scoreB ?? ''}
+                            onChange={(e) => updateResult(match.id, 'scoreB', e.target.value, phase)}
+                            disabled={result.completed}
+                            className="w-12 sm:w-16 px-1 sm:px-2 py-1 text-center border rounded disabled:bg-gray-100 text-sm sm:text-base"
+                          />
                         </div>
-                      )}
+                        <div className="flex-1 text-left font-semibold text-sm sm:text-base truncate">{teamB?.name}</div>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 sm:shrink-0">
+                        {!result.completed ? (
+                          <button
+                            onClick={() => confirmMatch(match.id, phase)}
+                            className="bg-green-500 hover:bg-green-600 text-white px-4 sm:px-3 py-1.5 sm:py-1 rounded text-xs sm:text-sm font-medium w-full sm:w-auto"
+                          >
+                            ✓ Zatwierdź
+                          </button>
+                        ) : (
+                          <>
+                            <span className="text-green-600 text-lg sm:text-base">✓</span>
+                            <button
+                              onClick={() => uncheckMatch(match.id, phase)}
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-3 sm:px-3 py-1.5 sm:py-1 rounded text-xs sm:text-sm flex items-center justify-center gap-1 flex-1 sm:flex-initial"
+                            >
+                              <Edit2 size={14} className="shrink-0" />
+                              <span>Edytuj</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -999,34 +1004,34 @@ export default function GroupStageTournament() {
     const allMatchesCompleted = Object.values(qualifyingResults).every(r => r.completed);
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-2 sm:p-4">
         <div className="max-w-6xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-3xl font-bold text-purple-900">
+          <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-6 mb-4 sm:mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+              <h1 className="text-xl sm:text-3xl font-bold text-purple-900">
                 Faza Kwalifikacyjna
               </h1>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap w-full sm:w-auto">
                 <button
                   onClick={() => setShowTeamManagement(!showTeamManagement)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-initial justify-center"
                 >
-                  <Users size={20} />
-                  Drużyny
+                  <Users size={18} className="sm:w-5 sm:h-5" />
+                  <span>Drużyny</span>
                 </button>
                 <button
                   onClick={exportCSV}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-green-500 hover:bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-initial justify-center"
                 >
-                  <Download size={20} />
-                  CSV
+                  <Download size={18} className="sm:w-5 sm:h-5" />
+                  <span>CSV</span>
                 </button>
                 <button
                   onClick={resetTournament}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-initial justify-center"
                 >
-                  <RotateCcw size={20} />
-                  Reset
+                  <RotateCcw size={18} className="sm:w-5 sm:h-5" />
+                  <span>Reset</span>
                 </button>
               </div>
             </div>
@@ -1036,7 +1041,7 @@ export default function GroupStageTournament() {
                 <button
                   key={group.id}
                   onClick={() => setSelectedGroup(idx)}
-                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  className={`px-3 sm:px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base ${
                     selectedGroup === idx
                       ? 'bg-purple-500 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -1132,34 +1137,34 @@ export default function GroupStageTournament() {
     const allFinalsCompleted = allTier1Completed && allTier2Completed;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 p-2 sm:p-4">
         <div className="max-w-6xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-3xl font-bold text-orange-900">
+          <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-6 mb-4 sm:mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+              <h1 className="text-xl sm:text-3xl font-bold text-orange-900">
                 Faza Finałowa
               </h1>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap w-full sm:w-auto">
                 <button
                   onClick={() => setShowTeamManagement(!showTeamManagement)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-initial justify-center"
                 >
-                  <Users size={20} />
-                  Drużyny
+                  <Users size={18} className="sm:w-5 sm:h-5" />
+                  <span>Drużyny</span>
                 </button>
                 <button
                   onClick={exportCSV}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-green-500 hover:bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-initial justify-center"
                 >
-                  <Download size={20} />
-                  CSV
+                  <Download size={18} className="sm:w-5 sm:h-5" />
+                  <span>CSV</span>
                 </button>
                 <button
                   onClick={resetTournament}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  className="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-initial justify-center"
                 >
-                  <RotateCcw size={20} />
-                  Reset
+                  <RotateCcw size={18} className="sm:w-5 sm:h-5" />
+                  <span>Reset</span>
                 </button>
               </div>
             </div>
@@ -1167,18 +1172,18 @@ export default function GroupStageTournament() {
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => { setCurrentTier(1); setSelectedGroup(0); }}
-                className={`px-6 py-3 rounded-lg font-bold transition ${
+                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-bold transition text-sm sm:text-base flex-1 sm:flex-initial ${
                   currentTier === 1
                     ? 'bg-yellow-500 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                <Trophy className="inline mr-2" size={20} />
+                <Trophy className="inline mr-2" size={18} />
                 I Liga
               </button>
               <button
                 onClick={() => { setCurrentTier(2); setSelectedGroup(0); }}
-                className={`px-6 py-3 rounded-lg font-bold transition ${
+                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-bold transition text-sm sm:text-base flex-1 sm:flex-initial ${
                   currentTier === 2
                     ? 'bg-gray-500 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -1193,7 +1198,7 @@ export default function GroupStageTournament() {
                 <button
                   key={group.id}
                   onClick={() => setSelectedGroup(idx)}
-                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  className={`px-3 sm:px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base ${
                     selectedGroup === idx
                       ? currentTier === 1 ? 'bg-yellow-500 text-white' : 'bg-gray-500 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
