@@ -358,8 +358,9 @@ export default function GroupTournament() {
                 
                 // Usuń tego przeciwnika z listy jeśli był tylko walkower
                 if (teamData.swissOpponents?.includes(opponentId)) {
-                  // Cofnij statystyki za walkower
+                  // Cofnij statystyki za walkower (3:0)
                   teamData.goalsFor = Math.max(0, (teamData.goalsFor || 0) - 3);
+                  teamData.goalsAgainst = Math.max(0, (teamData.goalsAgainst || 0) - 0); // przeciwnik dostał 0
                   teamData.swissPoints = Math.max(0, (teamData.swissPoints || 0) - pointsWin);
                   teamData.wins = Math.max(0, (teamData.wins || 0) - 1);
                   
@@ -436,12 +437,14 @@ export default function GroupTournament() {
 
   // Funkcja generowania parowań Swiss
   const generateSwissPairings = (roundNumber) => {
-    const teamsCopy = teams.map(t => ({
-      ...t,
-      swissPoints: t.swissPoints || 0,
-      swissOpponents: t.swissOpponents || [],
-      byeCount: t.byeCount || 0
-    }));
+    const teamsCopy = teams
+      .filter(t => !t.withdrawn) // Pomijamy wycofane drużyny
+      .map(t => ({
+        ...t,
+        swissPoints: t.swissPoints || 0,
+        swissOpponents: t.swissOpponents || [],
+        byeCount: t.byeCount || 0
+      }));
     
     // Sortuj drużyny wg punktów malejąco, potem różnicy bramek
     const sortedTeams = [...teamsCopy].sort((a, b) => {
@@ -633,13 +636,15 @@ export default function GroupTournament() {
       // Najpierw zaktualizuj drużyny, potem generuj parowania
       setTeams(updatedTeams);
       
-      // Generuj następną rundę z użyciem zaktualizowanych drużyn
-      const teamsCopy = updatedTeams.map(t => ({
-        ...t,
-        swissPoints: t.swissPoints || 0,
-        swissOpponents: t.swissOpponents || [],
-        byeCount: t.byeCount || 0
-      }));
+      // Generuj następną rundę z użyciem zaktualizowanych drużyn (tylko aktywne)
+      const teamsCopy = updatedTeams
+        .filter(t => !t.withdrawn) // Pomijamy wycofane drużyny
+        .map(t => ({
+          ...t,
+          swissPoints: t.swissPoints || 0,
+          swissOpponents: t.swissOpponents || [],
+          byeCount: t.byeCount || 0
+        }));
       
       // Sortuj drużyny wg punktów
       const sortedTeams = [...teamsCopy].sort((a, b) => {
@@ -742,13 +747,15 @@ export default function GroupTournament() {
 
   // Obliczanie tabeli Swiss
   const calculateSwissStandings = () => {
-    return [...teams].sort((a, b) => {
-      if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
-      const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
-      const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
-      if (bDiff !== aDiff) return bDiff - aDiff;
-      return (b.goalsFor || 0) - (a.goalsFor || 0);
-    });
+    return [...teams]
+      .filter(t => !t.withdrawn) // Pomijamy wycofane drużyny
+      .sort((a, b) => {
+        if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
+        const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
+        const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
+        if (bDiff !== aDiff) return bDiff - aDiff;
+        return (b.goalsFor || 0) - (a.goalsFor || 0);
+      });
   };
 
   // Generowanie fazy playoff
