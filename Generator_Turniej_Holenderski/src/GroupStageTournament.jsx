@@ -1,62 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Upload, Download, Users, Award, ArrowRight, RotateCcw, Edit2, Trash2 } from 'lucide-react';
+import { Save, Upload, Download, Users, Award, ArrowRight, RotateCcw, Edit2, Trash2, Trophy } from 'lucide-react';
 
 export default function GroupStageTournament() {
-  const STORAGE_KEY = 'group_stage_tournament_v1';
+  const STORAGE_KEY = 'group_stage_tournament_v2';
 
-  // Kroki turnieju
-  const [step, setStep] = useState(0); // 0=setup, 1=qualifying, 2=final
+  // Kroki: 0=setup, 1=qualifying, 2=finals
+  const [step, setStep] = useState(0);
   
   // Setup
-  const [numGroups, setNumGroups] = useState(4);
-  const [teamsPerGroup, setTeamsPerGroup] = useState(4);
-  const [advancePerGroup, setAdvancePerGroup] = useState(2);
-  const [finalGroups, setFinalGroups] = useState(2);
+  const [numQualGroups, setNumQualGroups] = useState(6);
+  const [teamsPerQualGroup, setTeamsPerQualGroup] = useState(6);
+  const [tier1Groups, setTier1Groups] = useState(2);
+  const [tier1TeamsPerGroup, setTier1TeamsPerGroup] = useState(6);
+  const [tier2Groups, setTier2Groups] = useState(4);
   const [pointsWin, setPointsWin] = useState(3);
   const [pointsDraw, setPointsDraw] = useState(1);
-  const [matchesPerPair, setMatchesPerPair] = useState(1); // 1 lub 2 mecze
+  const [matchesPerPair, setMatchesPerPair] = useState(1);
 
-  // Drużyny i grupy
+  // Dane
   const [teams, setTeams] = useState([]);
   const [qualifyingGroups, setQualifyingGroups] = useState([]);
   const [qualifyingMatches, setQualifyingMatches] = useState({});
   const [qualifyingResults, setQualifyingResults] = useState({});
   
-  const [finalGroupsData, setFinalGroupsData] = useState([]);
-  const [finalMatches, setFinalMatches] = useState({});
-  const [finalResults, setFinalResults] = useState({});
+  const [tier1GroupsData, setTier1GroupsData] = useState([]);
+  const [tier1Matches, setTier1Matches] = useState({});
+  const [tier1Results, setTier1Results] = useState({});
+  
+  const [tier2GroupsData, setTier2GroupsData] = useState([]);
+  const [tier2Matches, setTier2Matches] = useState({});
+  const [tier2Results, setTier2Results] = useState({});
 
   // UI
   const [selectedGroup, setSelectedGroup] = useState(0);
+  const [currentTier, setCurrentTier] = useState(1);
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [editingTeam, setEditingTeam] = useState(null);
 
-  // Zapisz do localStorage
+  // Auto-save
   useEffect(() => {
     const saveTimer = setTimeout(() => {
       const state = {
-        step, numGroups, teamsPerGroup, advancePerGroup, finalGroups,
-        pointsWin, pointsDraw, matchesPerPair,
-        teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
-        finalGroupsData, finalMatches, finalResults
+        step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
+        pointsWin, pointsDraw, matchesPerPair, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
+        tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }, 500);
     return () => clearTimeout(saveTimer);
-  }, [step, numGroups, teamsPerGroup, advancePerGroup, finalGroups, pointsWin, pointsDraw, matchesPerPair,
-      teams, qualifyingGroups, qualifyingMatches, qualifyingResults, finalGroupsData, finalMatches, finalResults]);
+  }, [step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
+      pointsWin, pointsDraw, matchesPerPair, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
+      tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier]);
 
-  // Wczytaj z localStorage
+  // Load from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const state = JSON.parse(saved);
         setStep(state.step || 0);
-        setNumGroups(state.numGroups || 4);
-        setTeamsPerGroup(state.teamsPerGroup || 4);
-        setAdvancePerGroup(state.advancePerGroup || 2);
-        setFinalGroups(state.finalGroups || 2);
+        setNumQualGroups(state.numQualGroups || 6);
+        setTeamsPerQualGroup(state.teamsPerQualGroup || 6);
+        setTier1Groups(state.tier1Groups || 2);
+        setTier1TeamsPerGroup(state.tier1TeamsPerGroup || 6);
+        setTier2Groups(state.tier2Groups || 4);
         setPointsWin(state.pointsWin || 3);
         setPointsDraw(state.pointsDraw || 1);
         setMatchesPerPair(state.matchesPerPair || 1);
@@ -64,61 +71,102 @@ export default function GroupStageTournament() {
         setQualifyingGroups(state.qualifyingGroups || []);
         setQualifyingMatches(state.qualifyingMatches || {});
         setQualifyingResults(state.qualifyingResults || {});
-        setFinalGroupsData(state.finalGroupsData || []);
-        setFinalMatches(state.finalMatches || {});
-        setFinalResults(state.finalResults || {});
+        setTier1GroupsData(state.tier1GroupsData || []);
+        setTier1Matches(state.tier1Matches || {});
+        setTier1Results(state.tier1Results || {});
+        setTier2GroupsData(state.tier2GroupsData || []);
+        setTier2Matches(state.tier2Matches || {});
+        setTier2Results(state.tier2Results || {});
+        setCurrentTier(state.currentTier || 1);
       } catch (e) {
         console.error('Błąd wczytywania:', e);
       }
     }
   }, []);
 
-  // Generuj nazwy grup (A, B, C, ...)
   const getGroupName = (index) => String.fromCharCode(65 + index);
+
+  // Algorytm Round-Robin Rotation - równomierne rozłożenie meczów
+  const generateRoundRobinMatches = (teamIds, groupId, phase) => {
+    const matches = [];
+    const n = teamIds.length;
+    let matchId = 0;
+
+    const teams = n % 2 !== 0 ? [...teamIds, null] : [...teamIds];
+    const totalTeams = teams.length;
+    const rounds = totalTeams - 1;
+
+    for (let round = 0; round < rounds; round++) {
+      for (let i = 0; i < totalTeams / 2; i++) {
+        const home = teams[i];
+        const away = teams[totalTeams - 1 - i];
+
+        if (home !== null && away !== null) {
+          matches.push({
+            id: `${phase}-g${groupId}-r${round + 1}-m${matchId++}`,
+            groupId, teamA: home, teamB: away, phase, round: round + 1
+          });
+
+          if (matchesPerPair === 2) {
+            matches.push({
+              id: `${phase}-g${groupId}-r${round + rounds + 1}-m${matchId++}`,
+              groupId, teamA: away, teamB: home, phase, round: round + rounds + 1
+            });
+          }
+        }
+      }
+
+      const fixed = teams[0];
+      const rest = teams.slice(1);
+      const rotated = [rest[rest.length - 1], ...rest.slice(0, rest.length - 1)];
+      teams.splice(0, teams.length, fixed, ...rotated);
+    }
+
+    return matches;
+  };
 
   // Inicjalizacja turnieju
   const initializeTournament = () => {
-    const totalTeams = numGroups * teamsPerGroup;
+    const totalTeams = numQualGroups * teamsPerQualGroup;
+    const tier1Total = tier1Groups * tier1TeamsPerGroup;
+    const tier2Total = totalTeams - tier1Total;
+
+    if (tier2Total < 0) {
+      alert('Błąd: Więcej miejsc w I lidze niż drużyn!');
+      return;
+    }
+
+    if (tier2Total > 0 && tier2Groups === 0) {
+      alert('Błąd: Ustaw liczbę grup II ligi (zostało ' + tier2Total + ' drużyn)');
+      return;
+    }
+
     const newTeams = Array.from({ length: totalTeams }, (_, i) => ({
       id: i + 1,
       name: `Drużyna ${i + 1}`,
-      originalGroup: Math.floor(i / teamsPerGroup),
-      qualifyingPoints: 0,
-      qualifyingGoalsFor: 0,
-      qualifyingGoalsAgainst: 0,
-      qualifyingWins: 0,
-      qualifyingDraws: 0,
-      qualifyingLosses: 0,
-      finalPoints: 0,
-      finalGoalsFor: 0,
-      finalGoalsAgainst: 0,
-      finalWins: 0,
-      finalDraws: 0,
-      finalLosses: 0,
+      originalGroup: Math.floor(i / teamsPerQualGroup),
+      qualPoints: 0, qualGoalsFor: 0, qualGoalsAgainst: 0,
+      qualWins: 0, qualDraws: 0, qualLosses: 0,
+      finalPoints: 0, finalGoalsFor: 0, finalGoalsAgainst: 0,
+      finalWins: 0, finalDraws: 0, finalLosses: 0,
     }));
 
     setTeams(newTeams);
 
-    // Stwórz grupy kwalifikacyjne
-    const groups = Array.from({ length: numGroups }, (_, i) => {
-      const groupTeams = newTeams.filter(t => t.originalGroup === i);
-      return {
-        id: i,
-        name: getGroupName(i),
-        teams: groupTeams.map(t => t.id)
-      };
-    });
+    const groups = Array.from({ length: numQualGroups }, (_, i) => ({
+      id: i,
+      name: getGroupName(i),
+      teams: newTeams.filter(t => t.originalGroup === i).map(t => t.id)
+    }));
 
     setQualifyingGroups(groups);
 
-    // Generuj mecze dla każdej grupy kwalifikacyjnej
     const matches = {};
     groups.forEach(group => {
-      matches[group.id] = generateRoundRobinMatches(group.teams, group.id, 'qualifying');
+      matches[group.id] = generateRoundRobinMatches(group.teams, group.id, 'qual');
     });
     setQualifyingMatches(matches);
 
-    // Inicjalizuj wyniki
     const results = {};
     Object.values(matches).flat().forEach(match => {
       results[match.id] = { scoreA: '', scoreB: '', completed: false };
@@ -129,59 +177,78 @@ export default function GroupStageTournament() {
     setSelectedGroup(0);
   };
 
-  // Generowanie meczów każdy z każdym
-  const generateRoundRobinMatches = (teamIds, groupId, phase) => {
-    const matches = [];
-    let matchId = 0;
+  // Sortowanie drużyn w grupie
+  const sortGroupTeams = (teamIds, phase, groupId) => {
+    const prefix = phase === 'qual' ? 'qual' : 'final';
+    const matches = phase === 'qual' ? qualifyingMatches : (phase === 'tier1' ? tier1Matches : tier2Matches);
+    const results = phase === 'qual' ? qualifyingResults : (phase === 'tier1' ? tier1Results : tier2Results);
 
-    for (let i = 0; i < teamIds.length; i++) {
-      for (let j = i + 1; j < teamIds.length; j++) {
-        // Pierwszy mecz
-        matches.push({
-          id: `${phase}-g${groupId}-m${matchId++}`,
-          groupId,
-          teamA: teamIds[i],
-          teamB: teamIds[j],
-          phase,
-          leg: 1
-        });
+    const getHeadToHead = (a, b) => {
+      let aPoints = 0, bPoints = 0, aGF = 0, aGA = 0, bGF = 0, bGA = 0, count = 0;
 
-        // Rewanż jeśli włączony
-        if (matchesPerPair === 2) {
-          matches.push({
-            id: `${phase}-g${groupId}-m${matchId++}`,
-            groupId,
-            teamA: teamIds[j],
-            teamB: teamIds[i],
-            phase,
-            leg: 2
-          });
+      const groupMatches = matches[groupId] || [];
+      groupMatches.forEach(match => {
+        const result = results[match.id];
+        if (!result?.completed) return;
+
+        if ((match.teamA === a.id && match.teamB === b.id) || (match.teamA === b.id && match.teamB === a.id)) {
+          count++;
+          const scoreA = parseInt(result.scoreA);
+          const scoreB = parseInt(result.scoreB);
+
+          if (match.teamA === a.id) {
+            aGF += scoreA; aGA += scoreB; bGF += scoreB; bGA += scoreA;
+            if (scoreA > scoreB) aPoints += pointsWin;
+            else if (scoreA === scoreB) { aPoints += pointsDraw; bPoints += pointsDraw; }
+            else bPoints += pointsWin;
+          } else {
+            bGF += scoreA; bGA += scoreB; aGF += scoreB; aGA += scoreA;
+            if (scoreA > scoreB) bPoints += pointsWin;
+            else if (scoreA === scoreB) { aPoints += pointsDraw; bPoints += pointsDraw; }
+            else aPoints += pointsWin;
+          }
         }
-      }
-    }
+      });
 
-    return matches;
+      return count === 0 ? null : { aPoints, bPoints, aGD: aGF - aGA, bGD: bGF - bGA, aGF, bGF };
+    };
+
+    return teamIds
+      .map(id => teams.find(t => t.id === id))
+      .sort((a, b) => {
+        if (b[`${prefix}Points`] !== a[`${prefix}Points`]) 
+          return b[`${prefix}Points`] - a[`${prefix}Points`];
+
+        const h2h = getHeadToHead(a, b);
+        if (h2h) {
+          if (h2h.aPoints !== h2h.bPoints) return h2h.bPoints - h2h.aPoints;
+          if (h2h.aGD !== h2h.bGD) return h2h.bGD - h2h.aGD;
+          if (h2h.aGF !== h2h.bGF) return h2h.bGF - h2h.aGF;
+        }
+
+        const aDiff = a[`${prefix}GoalsFor`] - a[`${prefix}GoalsAgainst`];
+        const bDiff = b[`${prefix}GoalsFor`] - b[`${prefix}GoalsAgainst`];
+        if (bDiff !== aDiff) return bDiff - aDiff;
+
+        return b[`${prefix}GoalsFor`] - a[`${prefix}GoalsFor`];
+      })
+      .map(t => t.id);
   };
 
   // Aktualizacja wyniku
   const updateResult = (matchId, field, value, phase) => {
-    const results = phase === 'qualifying' ? qualifyingResults : finalResults;
-    const setResults = phase === 'qualifying' ? setQualifyingResults : setFinalResults;
+    const [results, setResults] = phase === 'qual' ? [qualifyingResults, setQualifyingResults] :
+                                    phase === 'tier1' ? [tier1Results, setTier1Results] :
+                                    [tier2Results, setTier2Results];
 
-    setResults({
-      ...results,
-      [matchId]: {
-        ...results[matchId],
-        [field]: value === '' ? '' : parseInt(value) || 0
-      }
-    });
+    setResults({ ...results, [matchId]: { ...results[matchId], [field]: value === '' ? '' : parseInt(value) || 0 } });
   };
 
-  // Zatwierdzenie wyniku meczu
+  // Zatwierdzenie meczu
   const confirmMatch = (matchId, phase) => {
-    const results = phase === 'qualifying' ? qualifyingResults : finalResults;
-    const setResults = phase === 'qualifying' ? setQualifyingResults : setFinalResults;
-    const matches = phase === 'qualifying' ? qualifyingMatches : finalMatches;
+    const [results, setResults, matches] = phase === 'qual' ? [qualifyingResults, setQualifyingResults, qualifyingMatches] :
+                                             phase === 'tier1' ? [tier1Results, setTier1Results, tier1Matches] :
+                                             [tier2Results, setTier2Results, tier2Matches];
 
     const result = results[matchId];
     if (result.scoreA === '' || result.scoreB === '') {
@@ -189,27 +256,16 @@ export default function GroupStageTournament() {
       return;
     }
 
-    // Znajdź mecz
-    let match;
-    if (phase === 'qualifying') {
-      match = Object.values(matches).flat().find(m => m.id === matchId);
-    } else {
-      match = Object.values(matches).flat().find(m => m.id === matchId);
-    }
-
+    const match = Object.values(matches).flat().find(m => m.id === matchId);
     if (!match) return;
 
-    // Aktualizuj statystyki drużyn
     const updatedTeams = teams.map(team => {
+      if (team.id !== match.teamA && team.id !== match.teamB) return team;
+
       const newTeam = { ...team };
-      const isTeamA = team.id === match.teamA;
-      const isTeamB = team.id === match.teamB;
-
-      if (!isTeamA && !isTeamB) return team;
-
-      const prefix = phase === 'qualifying' ? 'qualifying' : 'final';
-      const scored = isTeamA ? result.scoreA : result.scoreB;
-      const conceded = isTeamA ? result.scoreB : result.scoreA;
+      const prefix = phase === 'qual' ? 'qual' : 'final';
+      const scored = team.id === match.teamA ? result.scoreA : result.scoreB;
+      const conceded = team.id === match.teamA ? result.scoreB : result.scoreA;
 
       newTeam[`${prefix}GoalsFor`] += scored;
       newTeam[`${prefix}GoalsAgainst`] += conceded;
@@ -228,198 +284,169 @@ export default function GroupStageTournament() {
     });
 
     setTeams(updatedTeams);
-
-    setResults({
-      ...results,
-      [matchId]: { ...result, completed: true }
-    });
-  };
-
-  // Sortowanie drużyn w grupie
-  const sortGroupTeams = (teamIds, phase) => {
-    const prefix = phase === 'qualifying' ? 'qualifying' : 'final';
-    const matches = phase === 'qualifying' ? qualifyingMatches : finalMatches;
-    const results = phase === 'qualifying' ? qualifyingResults : finalResults;
-
-    // Funkcja do sprawdzenia bezpośrednich meczów
-    const getHeadToHeadResult = (teamA, teamB, groupId) => {
-      let teamAPoints = 0;
-      let teamBPoints = 0;
-      let teamAGoalsFor = 0;
-      let teamAGoalsAgainst = 0;
-      let teamBGoalsFor = 0;
-      let teamBGoalsAgainst = 0;
-      let matchesPlayed = 0;
-
-      const groupMatches = matches[groupId] || [];
-      
-      groupMatches.forEach(match => {
-        const result = results[match.id];
-        if (!result?.completed) return;
-
-        if ((match.teamA === teamA.id && match.teamB === teamB.id) ||
-            (match.teamA === teamB.id && match.teamB === teamA.id)) {
-          matchesPlayed++;
-          
-          const scoreA = parseInt(result.scoreA);
-          const scoreB = parseInt(result.scoreB);
-          
-          if (match.teamA === teamA.id) {
-            teamAGoalsFor += scoreA;
-            teamAGoalsAgainst += scoreB;
-            teamBGoalsFor += scoreB;
-            teamBGoalsAgainst += scoreA;
-            
-            if (scoreA > scoreB) teamAPoints += pointsWin;
-            else if (scoreA === scoreB) {
-              teamAPoints += pointsDraw;
-              teamBPoints += pointsDraw;
-            } else teamBPoints += pointsWin;
-          } else {
-            teamBGoalsFor += scoreA;
-            teamBGoalsAgainst += scoreB;
-            teamAGoalsFor += scoreB;
-            teamAGoalsAgainst += scoreA;
-            
-            if (scoreA > scoreB) teamBPoints += pointsWin;
-            else if (scoreA === scoreB) {
-              teamAPoints += pointsDraw;
-              teamBPoints += pointsDraw;
-            } else teamAPoints += pointsWin;
-          }
-        }
-      });
-
-      if (matchesPlayed === 0) return null;
-
-      return {
-        teamAPoints, teamBPoints,
-        teamAGoalDiff: teamAGoalsFor - teamAGoalsAgainst,
-        teamBGoalDiff: teamBGoalsFor - teamBGoalsAgainst,
-        teamAGoalsFor, teamBGoalsFor
-      };
-    };
-
-    const groupId = teams.find(t => teamIds.includes(t.id))?.originalGroup;
-
-    return teamIds
-      .map(id => teams.find(t => t.id === id))
-      .sort((a, b) => {
-        // 1. Punkty
-        if (b[`${prefix}Points`] !== a[`${prefix}Points`]) 
-          return b[`${prefix}Points`] - a[`${prefix}Points`];
-        
-        // 2. Bezpośredni mecz
-        const headToHead = getHeadToHeadResult(a, b, groupId);
-        if (headToHead) {
-          if (headToHead.teamAPoints !== headToHead.teamBPoints) {
-            return headToHead.teamBPoints - headToHead.teamAPoints;
-          }
-          if (headToHead.teamAGoalDiff !== headToHead.teamBGoalDiff) {
-            return headToHead.teamBGoalDiff - headToHead.teamAGoalDiff;
-          }
-          if (headToHead.teamAGoalsFor !== headToHead.teamBGoalsFor) {
-            return headToHead.teamBGoalsFor - headToHead.teamAGoalsFor;
-          }
-        }
-        
-        // 3. Bilans bramek
-        const aDiff = a[`${prefix}GoalsFor`] - a[`${prefix}GoalsAgainst`];
-        const bDiff = b[`${prefix}GoalsFor`] - b[`${prefix}GoalsAgainst`];
-        if (bDiff !== aDiff) return bDiff - aDiff;
-        
-        // 4. Bramki strzelone
-        return b[`${prefix}GoalsFor`] - a[`${prefix}GoalsFor`];
-      })
-      .map(t => t.id);
+    setResults({ ...results, [matchId]: { ...result, completed: true } });
   };
 
   // Przejście do fazy finałowej
   const advanceToFinals = () => {
-    const advancedTeams = [];
+    const tier1TotalTeams = tier1Groups * tier1TeamsPerGroup;
+    const tier1PerGroup = Math.floor(tier1TotalTeams / numQualGroups);
+    const tier1Extra = tier1TotalTeams % numQualGroups;
 
-    // Zbierz drużyny z każdej grupy
+    const tier1Teams = [];
+    const tier2Teams = [];
+
+    // Dodaj pozycje w grupach
     qualifyingGroups.forEach(group => {
-      const sorted = sortGroupTeams(group.teams, 'qualifying');
-      const advancing = sorted.slice(0, advancePerGroup).map(id => teams.find(t => t.id === id));
-      advancedTeams.push(...advancing);
+      const sorted = sortGroupTeams(group.teams, 'qual', group.id);
+      sorted.forEach((teamId, position) => {
+        const team = teams.find(t => t.id === teamId);
+        team.qualPosition = position + 1;
+        team.qualGroupId = group.id;
+      });
     });
 
-    // Rozdziel drużyny do grup finałowych według klucza rozstawienia
-    // Najlepsze rozwiązanie: serpentyna (snake draft)
-    const finalGroupsArray = Array.from({ length: finalGroups }, () => []);
-    
-    advancedTeams.forEach((team, index) => {
-      const groupIndex = Math.floor(index / (advancedTeams.length / finalGroups));
-      const pos = index % (advancedTeams.length / finalGroups);
-      
-      // Serpentyna: 0→1→2→3, 3→2→1→0
-      const targetGroup = pos % 2 === 0 ? groupIndex : (finalGroups - 1 - groupIndex);
-      finalGroupsArray[targetGroup].push(team.id);
+    // Równy podział
+    if (tier1Extra === 0) {
+      qualifyingGroups.forEach(group => {
+        const sorted = sortGroupTeams(group.teams, 'qual', group.id);
+        tier1Teams.push(...sorted.slice(0, tier1PerGroup).map(id => teams.find(t => t.id === id)));
+        tier2Teams.push(...sorted.slice(tier1PerGroup).map(id => teams.find(t => t.id === id)));
+      });
+    } else {
+      // Nierówny podział - tabela miejsc premiowanych
+      qualifyingGroups.forEach(group => {
+        const sorted = sortGroupTeams(group.teams, 'qual', group.id);
+        tier1Teams.push(...sorted.slice(0, tier1PerGroup).map(id => teams.find(t => t.id === id)));
+      });
+
+      const extraCandidates = [];
+      qualifyingGroups.forEach(group => {
+        const sorted = sortGroupTeams(group.teams, 'qual', group.id);
+        if (sorted.length > tier1PerGroup) {
+          extraCandidates.push(teams.find(t => t.id === sorted[tier1PerGroup]));
+        }
+      });
+
+      const sortedCandidates = extraCandidates.sort((a, b) => {
+        if (b.qualPoints !== a.qualPoints) return b.qualPoints - a.qualPoints;
+        const aDiff = a.qualGoalsFor - a.qualGoalsAgainst;
+        const bDiff = b.qualGoalsFor - b.qualGoalsAgainst;
+        if (bDiff !== aDiff) return bDiff - aDiff;
+        return b.qualGoalsFor - a.qualGoalsFor;
+      });
+
+      tier1Teams.push(...sortedCandidates.slice(0, tier1Extra));
+
+      qualifyingGroups.forEach(group => {
+        const sorted = sortGroupTeams(group.teams, 'qual', group.id);
+        sorted.forEach(teamId => {
+          const team = teams.find(t => t.id === teamId);
+          if (!tier1Teams.find(t => t.id === team.id)) {
+            tier2Teams.push(team);
+          }
+        });
+      });
+    }
+
+    // Rozdziel I liga - serpentyna
+    const tier1GroupsArray = Array.from({ length: tier1Groups }, () => []);
+    tier1Teams.forEach((team, index) => {
+      const groupIndex = index % tier1Groups;
+      tier1GroupsArray[groupIndex].push(team.id);
     });
 
-    const newFinalGroups = finalGroupsArray.map((teamIds, i) => ({
-      id: i,
-      name: getGroupName(i),
-      teams: teamIds
+    const newTier1Groups = tier1GroupsArray.map((teamIds, i) => ({
+      id: i, name: `I-${getGroupName(i)}`, teams: teamIds, tier: 1
     }));
 
-    setFinalGroupsData(newFinalGroups);
+    setTier1GroupsData(newTier1Groups);
 
-    // Generuj mecze dla grup finałowych
-    const matches = {};
-    newFinalGroups.forEach(group => {
-      matches[group.id] = generateRoundRobinMatches(group.teams, group.id, 'final');
+    const tier1MatchesData = {};
+    newTier1Groups.forEach(group => {
+      tier1MatchesData[group.id] = generateRoundRobinMatches(group.teams, group.id, 'tier1');
     });
-    setFinalMatches(matches);
+    setTier1Matches(tier1MatchesData);
 
-    // Inicjalizuj wyniki
-    const results = {};
-    Object.values(matches).flat().forEach(match => {
-      results[match.id] = { scoreA: '', scoreB: '', completed: false };
+    const tier1ResultsData = {};
+    Object.values(tier1MatchesData).flat().forEach(match => {
+      tier1ResultsData[match.id] = { scoreA: '', scoreB: '', completed: false };
     });
-    setFinalResults(results);
+    setTier1Results(tier1ResultsData);
+
+    // Rozdziel II liga
+    const tier2GroupsArray = Array.from({ length: tier2Groups }, () => []);
+    tier2Teams.forEach((team, index) => {
+      const groupIndex = index % tier2Groups;
+      tier2GroupsArray[groupIndex].push(team.id);
+    });
+
+    const newTier2Groups = tier2GroupsArray.map((teamIds, i) => ({
+      id: i, name: `II-${getGroupName(i)}`, teams: teamIds, tier: 2
+    }));
+
+    setTier2GroupsData(newTier2Groups);
+
+    const tier2MatchesData = {};
+    newTier2Groups.forEach(group => {
+      tier2MatchesData[group.id] = generateRoundRobinMatches(group.teams, group.id, 'tier2');
+    });
+    setTier2Matches(tier2MatchesData);
+
+    const tier2ResultsData = {};
+    Object.values(tier2MatchesData).flat().forEach(match => {
+      tier2ResultsData[match.id] = { scoreA: '', scoreB: '', completed: false };
+    });
+    setTier2Results(tier2ResultsData);
 
     setStep(2);
     setSelectedGroup(0);
+    setCurrentTier(1);
   };
 
-  // Reset turnieju
   const resetTournament = () => {
-    if (window.confirm('Czy na pewno chcesz zresetować cały turniej?')) {
+    if (window.confirm('Czy na pewno chcesz zresetować turniej?')) {
       localStorage.removeItem(STORAGE_KEY);
       window.location.reload();
     }
   };
 
-  // Edycja nazwy drużyny
   const saveTeamName = () => {
     if (!editingTeam) return;
     setTeams(teams.map(t => t.id === editingTeam.id ? editingTeam : t));
     setEditingTeam(null);
   };
 
-  // Eksport CSV
   const exportCSV = () => {
     let csv = 'Turniej Grupowy - Wyniki\n\n';
-    
     csv += 'FAZA KWALIFIKACYJNA\n';
     qualifyingGroups.forEach(group => {
       csv += `\nGrupa ${group.name}\n`;
       csv += 'Miejsce,Drużyna,Mecze,Pkt,Bramki\n';
-      const sorted = sortGroupTeams(group.teams, 'qualifying');
+      const sorted = sortGroupTeams(group.teams, 'qual', group.id);
       sorted.forEach((teamId, i) => {
         const team = teams.find(t => t.id === teamId);
-        csv += `${i+1},${team.name},${team.qualifyingWins + team.qualifyingDraws + team.qualifyingLosses},${team.qualifyingPoints},${team.qualifyingGoalsFor}:${team.qualifyingGoalsAgainst}\n`;
+        csv += `${i+1},${team.name},${team.qualWins + team.qualDraws + team.qualLosses},${team.qualPoints},${team.qualGoalsFor}:${team.qualGoalsAgainst}\n`;
       });
     });
 
     if (step >= 2) {
-      csv += '\n\nFAZA FINAŁOWA\n';
-      finalGroupsData.forEach(group => {
+      csv += '\n\nI LIGA\n';
+      tier1GroupsData.forEach(group => {
         csv += `\nGrupa ${group.name}\n`;
         csv += 'Miejsce,Drużyna,Mecze,Pkt,Bramki\n';
-        const sorted = sortGroupTeams(group.teams, 'final');
+        const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
+        sorted.forEach((teamId, i) => {
+          const team = teams.find(t => t.id === teamId);
+          csv += `${i+1},${team.name},${team.finalWins + team.finalDraws + team.finalLosses},${team.finalPoints},${team.finalGoalsFor}:${team.finalGoalsAgainst}\n`;
+        });
+      });
+
+      csv += '\n\nII LIGA\n';
+      tier2GroupsData.forEach(group => {
+        csv += `\nGrupa ${group.name}\n`;
+        csv += 'Miejsce,Drużyna,Mecze,Pkt,Bramki\n';
+        const sorted = sortGroupTeams(group.teams, 'tier2', group.id);
         sorted.forEach((teamId, i) => {
           const team = teams.find(t => t.id === teamId);
           csv += `${i+1},${team.name},${team.finalWins + team.finalDraws + team.finalLosses},${team.finalPoints},${team.finalGoalsFor}:${team.finalGoalsAgainst}\n`;
@@ -434,10 +461,11 @@ export default function GroupStageTournament() {
     link.click();
   };
 
-  // Renderowanie tabeli grupy
-  const renderGroupTable = (groupTeams, phase) => {
-    const prefix = phase === 'qualifying' ? 'qualifying' : 'final';
-    const sorted = sortGroupTeams(groupTeams, phase);
+  const renderGroupTable = (groupTeams, phase, groupId) => {
+    const prefix = phase === 'qual' ? 'qual' : 'final';
+    const sorted = sortGroupTeams(groupTeams, phase, groupId);
+    const tier1TotalTeams = tier1Groups * tier1TeamsPerGroup;
+    const tier1PerGroup = Math.floor(tier1TotalTeams / numQualGroups);
 
     return (
       <div className="overflow-x-auto">
@@ -458,10 +486,10 @@ export default function GroupStageTournament() {
           <tbody>
             {sorted.map((teamId, index) => {
               const team = teams.find(t => t.id === teamId);
-              const isAdvancing = phase === 'qualifying' && index < advancePerGroup;
+              const isAdvancing = phase === 'qual' && index < tier1PerGroup;
               
               return (
-                <tr key={team.id} className={`border-t ${isAdvancing ? 'bg-green-50' : ''}`}>
+                <tr key={team.id} className={`border-t ${isAdvancing ? 'bg-green-100' : ''}`}>
                   <td className="p-2 font-semibold">{index + 1}</td>
                   <td className="p-2">{team.name}</td>
                   <td className="p-2 text-center">{team[`${prefix}Wins`] + team[`${prefix}Draws`] + team[`${prefix}Losses`]}</td>
@@ -480,62 +508,75 @@ export default function GroupStageTournament() {
     );
   };
 
-  // Renderowanie meczów grupy
   const renderGroupMatches = (groupId, phase) => {
-    const matches = phase === 'qualifying' ? qualifyingMatches[groupId] : finalMatches[groupId];
-    const results = phase === 'qualifying' ? qualifyingResults : finalResults;
+    const [matches, results] = phase === 'qual' ? [qualifyingMatches, qualifyingResults] :
+                                 phase === 'tier1' ? [tier1Matches, tier1Results] :
+                                 [tier2Matches, tier2Results];
+
+    const groupMatches = (matches[groupId] || []).sort((a, b) => a.round - b.round);
 
     return (
-      <div className="space-y-2">
-        {matches?.map(match => {
-          const teamA = teams.find(t => t.id === match.teamA);
-          const teamB = teams.find(t => t.id === match.teamB);
-          const result = results[match.id] || {};
+      <div className="space-y-4">
+        {Array.from(new Set(groupMatches.map(m => m.round))).map(round => (
+          <div key={round}>
+            <h4 className="font-semibold text-gray-700 mb-2">Runda {round}</h4>
+            <div className="space-y-2">
+              {groupMatches.filter(m => m.round === round).map(match => {
+                const teamA = teams.find(t => t.id === match.teamA);
+                const teamB = teams.find(t => t.id === match.teamB);
+                const result = results[match.id] || {};
 
-          return (
-            <div key={match.id} className="bg-white border rounded-lg p-3">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 text-right font-semibold">{teamA?.name}</div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    value={result.scoreA ?? ''}
-                    onChange={(e) => updateResult(match.id, 'scoreA', e.target.value, phase)}
-                    disabled={result.completed}
-                    className="w-16 px-2 py-1 text-center border rounded disabled:bg-gray-100"
-                  />
-                  <span className="font-bold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={result.scoreB ?? ''}
-                    onChange={(e) => updateResult(match.id, 'scoreB', e.target.value, phase)}
-                    disabled={result.completed}
-                    className="w-16 px-2 py-1 text-center border rounded disabled:bg-gray-100"
-                  />
-                </div>
-                <div className="flex-1 text-left font-semibold">{teamB?.name}</div>
-                {!result.completed ? (
-                  <button
-                    onClick={() => confirmMatch(match.id, phase)}
-                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
-                  >
-                    ✓
-                  </button>
-                ) : (
-                  <span className="text-green-600 px-3">✓</span>
-                )}
-              </div>
+                return (
+                  <div key={match.id} className="bg-white border rounded-lg p-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 text-right font-semibold">{teamA?.name}</div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={result.scoreA ?? ''}
+                          onChange={(e) => updateResult(match.id, 'scoreA', e.target.value, phase)}
+                          disabled={result.completed}
+                          className="w-16 px-2 py-1 text-center border rounded disabled:bg-gray-100"
+                        />
+                        <span className="font-bold">:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={result.scoreB ?? ''}
+                          onChange={(e) => updateResult(match.id, 'scoreB', e.target.value, phase)}
+                          disabled={result.completed}
+                          className="w-16 px-2 py-1 text-center border rounded disabled:bg-gray-100"
+                        />
+                      </div>
+                      <div className="flex-1 text-left font-semibold">{teamB?.name}</div>
+                      {!result.completed ? (
+                        <button
+                          onClick={() => confirmMatch(match.id, phase)}
+                          className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+                        >
+                          ✓
+                        </button>
+                      ) : (
+                        <span className="text-green-600 px-3">✓</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     );
   };
 
   // STEP 0: Setup
   if (step === 0) {
+    const totalTeams = numQualGroups * teamsPerQualGroup;
+    const tier1Total = tier1Groups * tier1TeamsPerGroup;
+    const tier2Total = totalTeams - tier1Total;
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100 p-4">
         <div className="max-w-2xl mx-auto">
@@ -544,64 +585,95 @@ export default function GroupStageTournament() {
               Turniej Grupowy
             </h1>
             <p className="text-gray-600 text-center mb-8">
-              System grupowy z przechodzeniem wyników
+              System grupowy z przechodzeniem do I i II ligi
             </p>
 
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Liczba grup kwalifikacyjnych:
-                </label>
-                <input
-                  type="number"
-                  min="2"
-                  max="8"
-                  value={numGroups}
-                  onChange={(e) => setNumGroups(parseInt(e.target.value) || 2)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                />
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                <h3 className="font-bold text-purple-900 mb-3">Faza kwalifikacyjna</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Liczba grup kwalifikacyjnych:
+                    </label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="12"
+                      value={numQualGroups}
+                      onChange={(e) => setNumQualGroups(parseInt(e.target.value) || 2)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Drużyn w grupie kwalifikacyjnej:
+                    </label>
+                    <input
+                      type="number"
+                      min="3"
+                      max="8"
+                      value={teamsPerQualGroup}
+                      onChange={(e) => setTeamsPerQualGroup(parseInt(e.target.value) || 3)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Drużyn w grupie kwalifikacyjnej:
-                </label>
-                <input
-                  type="number"
-                  min="3"
-                  max="8"
-                  value={teamsPerGroup}
-                  onChange={(e) => setTeamsPerGroup(parseInt(e.target.value) || 3)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                />
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                <h3 className="font-bold text-yellow-900 mb-3">I Liga (finały)</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Liczba grup I ligi:
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="8"
+                      value={tier1Groups}
+                      onChange={(e) => setTier1Groups(parseInt(e.target.value) || 1)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Drużyn w grupie I ligi:
+                    </label>
+                    <input
+                      type="number"
+                      min="3"
+                      max="8"
+                      value={tier1TeamsPerGroup}
+                      onChange={(e) => setTier1TeamsPerGroup(parseInt(e.target.value) || 3)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Ile drużyn awansuje z grupy:
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={teamsPerGroup - 1}
-                  value={advancePerGroup}
-                  onChange={(e) => setAdvancePerGroup(Math.min(parseInt(e.target.value) || 1, teamsPerGroup - 1))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Liczba grup finałowych:
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="4"
-                  value={finalGroups}
-                  onChange={(e) => setFinalGroups(parseInt(e.target.value) || 1)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                />
+              <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-4">
+                <h3 className="font-bold text-gray-900 mb-3">II Liga</h3>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Liczba grup II ligi:
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="8"
+                    value={tier2Groups}
+                    onChange={(e) => setTier2Groups(parseInt(e.target.value) || 1)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">
+                    Do II ligi trafi: <strong>{tier2Total > 0 ? tier2Total : 0} drużyn</strong>
+                    {tier2Total > 0 && ` (po ~${Math.ceil(tier2Total / tier2Groups)} w grupie)`}
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -648,15 +720,18 @@ export default function GroupStageTournament() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
                   <strong>Podsumowanie:</strong><br />
-                  • {numGroups * teamsPerGroup} drużyn w {numGroups} grupach kwalifikacyjnych<br />
-                  • {numGroups * advancePerGroup} drużyn awansuje do {finalGroups} grup finałowych<br />
-                  • Po {numGroups * advancePerGroup / finalGroups} drużyn w każdej grupie finałowej
+                  • {totalTeams} drużyn w {numQualGroups} grupach kwalifikacyjnych<br />
+                  • I Liga: {tier1Groups} grup × {tier1TeamsPerGroup} drużyn = {tier1Total} miejsc<br />
+                  • II Liga: {tier2Groups} {tier2Groups === 1 ? 'grupa' : 'grup'}, {tier2Total > 0 ? tier2Total : 0} drużyn<br />
+                  • Wszystkie drużyny awansują do kolejnej fazy
+                  {tier2Total < 0 && <span className="text-red-600 block mt-2">⚠️ Błąd: Więcej miejsc w I lidze niż drużyn!</span>}
                 </p>
               </div>
 
               <button
                 onClick={initializeTournament}
-                className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 shadow-lg"
+                disabled={tier2Total < 0}
+                className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Rozpocznij turniej
               </button>
@@ -667,159 +742,283 @@ export default function GroupStageTournament() {
     );
   }
 
-  // STEP 1 & 2: Qualifying & Finals
-  const isQualifying = step === 1;
-  const currentGroups = isQualifying ? qualifyingGroups : finalGroupsData;
-  const currentPhase = isQualifying ? 'qualifying' : 'final';
-  const allMatchesCompleted = Object.values(isQualifying ? qualifyingResults : finalResults)
-    .every(r => r.completed);
+  // STEP 1: Qualifying
+  if (step === 1) {
+    const allMatchesCompleted = Object.values(qualifyingResults).every(r => r.completed);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Nagłówek */}
-        <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold text-gray-800">
-              {isQualifying ? 'Faza Kwalifikacyjna' : 'Faza Finałowa'}
-            </h1>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowTeamManagement(!showTeamManagement)}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-              >
-                <Users size={20} />
-                Drużyny
-              </button>
-              <button
-                onClick={exportCSV}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-              >
-                <Download size={20} />
-                CSV
-              </button>
-              <button
-                onClick={resetTournament}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-              >
-                <RotateCcw size={20} />
-                Reset
-              </button>
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-3xl font-bold text-purple-900">
+                Faza Kwalifikacyjna
+              </h1>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowTeamManagement(!showTeamManagement)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <Users size={20} />
+                  Drużyny
+                </button>
+                <button
+                  onClick={exportCSV}
+                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <Download size={20} />
+                  CSV
+                </button>
+                <button
+                  onClick={resetTournament}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <RotateCcw size={20} />
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 flex-wrap">
+              {qualifyingGroups.map((group, idx) => (
+                <button
+                  key={group.id}
+                  onClick={() => setSelectedGroup(idx)}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    selectedGroup === idx
+                      ? 'bg-purple-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Grupa {group.name}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Wybór grupy */}
-          <div className="flex gap-2 flex-wrap">
-            {currentGroups.map((group, idx) => (
-              <button
-                key={group.id}
-                onClick={() => setSelectedGroup(idx)}
-                className={`px-4 py-2 rounded-lg font-semibold transition ${
-                  selectedGroup === idx
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Grupa {group.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tabela grupy */}
-        <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">
-            Grupa {currentGroups[selectedGroup]?.name} - Tabela
-          </h2>
-          {renderGroupTable(currentGroups[selectedGroup]?.teams, currentPhase)}
-        </div>
-
-        {/* Mecze grupy */}
-        <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">
-            Grupa {currentGroups[selectedGroup]?.name} - Mecze
-          </h2>
-          {renderGroupMatches(currentGroups[selectedGroup]?.id, currentPhase)}
-        </div>
-
-        {/* Przycisk przejścia do finałów */}
-        {isQualifying && allMatchesCompleted && (
-          <div className="bg-white rounded-xl shadow-xl p-6">
-            <button
-              onClick={advanceToFinals}
-              className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 shadow-lg flex items-center justify-center gap-2"
-            >
-              Przejdź do fazy finałowej <ArrowRight size={24} />
-            </button>
-          </div>
-        )}
-
-        {/* Klasyfikacja końcowa */}
-        {!isQualifying && allMatchesCompleted && (
-          <div className="bg-white rounded-xl shadow-xl p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <Award className="text-yellow-500" />
-              Klasyfikacja końcowa
+          <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Grupa {qualifyingGroups[selectedGroup]?.name} - Tabela
             </h2>
-            <div className="text-center text-green-600 font-semibold text-lg">
-              Turniej zakończony! Zobacz tabele powyżej.
+            {renderGroupTable(qualifyingGroups[selectedGroup]?.teams, 'qual', qualifyingGroups[selectedGroup]?.id)}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Grupa {qualifyingGroups[selectedGroup]?.name} - Mecze
+            </h2>
+            {renderGroupMatches(qualifyingGroups[selectedGroup]?.id, 'qual')}
+          </div>
+
+          {allMatchesCompleted && (
+            <div className="bg-white rounded-xl shadow-xl p-6">
+              <button
+                onClick={advanceToFinals}
+                className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 shadow-lg flex items-center justify-center gap-2"
+              >
+                Przejdź do fazy finałowej (I i II liga) <ArrowRight size={24} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {showTeamManagement && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4">Zarządzanie drużynami</h2>
+              <div className="space-y-2 mb-4">
+                {teams.map(team => (
+                  <div key={team.id} className="flex items-center gap-2 p-2 border rounded">
+                    {editingTeam?.id === team.id ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editingTeam.name}
+                          onChange={(e) => setEditingTeam({ ...editingTeam, name: e.target.value })}
+                          className="flex-1 px-2 py-1 border rounded"
+                        />
+                        <button onClick={saveTeamName} className="bg-green-500 text-white px-3 py-1 rounded">✓</button>
+                        <button onClick={() => setEditingTeam(null)} className="bg-gray-300 px-3 py-1 rounded">✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1">{team.name}</span>
+                        <button
+                          onClick={() => setEditingTeam(team)}
+                          className="bg-blue-500 text-white px-3 py-1 rounded flex items-center gap-1"
+                        >
+                          <Edit2 size={16} /> Edytuj
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowTeamManagement(false)}
+                className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Zamknij
+              </button>
             </div>
           </div>
         )}
       </div>
+    );
+  }
 
-      {/* Modal zarządzania drużynami */}
-      {showTeamManagement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">Zarządzanie drużynami</h2>
-            <div className="space-y-2 mb-4">
-              {teams.map(team => (
-                <div key={team.id} className="flex items-center gap-2 p-2 border rounded">
-                  {editingTeam?.id === team.id ? (
-                    <>
-                      <input
-                        type="text"
-                        value={editingTeam.name}
-                        onChange={(e) => setEditingTeam({ ...editingTeam, name: e.target.value })}
-                        className="flex-1 px-2 py-1 border rounded"
-                      />
-                      <button
-                        onClick={saveTeamName}
-                        className="bg-green-500 text-white px-3 py-1 rounded"
-                      >
-                        ✓
-                      </button>
-                      <button
-                        onClick={() => setEditingTeam(null)}
-                        className="bg-gray-300 px-3 py-1 rounded"
-                      >
-                        ✕
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex-1">{team.name}</span>
-                      <button
-                        onClick={() => setEditingTeam(team)}
-                        className="bg-blue-500 text-white px-3 py-1 rounded flex items-center gap-1"
-                      >
-                        <Edit2 size={16} /> Edytuj
-                      </button>
-                    </>
-                  )}
-                </div>
+  // STEP 2: Finals (I i II liga)
+  if (step === 2) {
+    const currentGroups = currentTier === 1 ? tier1GroupsData : tier2GroupsData;
+    const currentPhase = currentTier === 1 ? 'tier1' : 'tier2';
+    const currentResults = currentTier === 1 ? tier1Results : tier2Results;
+    const allMatchesCompleted = Object.values(currentResults).every(r => r.completed);
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 p-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-3xl font-bold text-orange-900">
+                Faza Finałowa
+              </h1>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowTeamManagement(!showTeamManagement)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <Users size={20} />
+                  Drużyny
+                </button>
+                <button
+                  onClick={exportCSV}
+                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <Download size={20} />
+                  CSV
+                </button>
+                <button
+                  onClick={resetTournament}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <RotateCcw size={20} />
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => { setCurrentTier(1); setSelectedGroup(0); }}
+                className={`px-6 py-3 rounded-lg font-bold transition ${
+                  currentTier === 1
+                    ? 'bg-yellow-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <Trophy className="inline mr-2" size={20} />
+                I Liga
+              </button>
+              <button
+                onClick={() => { setCurrentTier(2); setSelectedGroup(0); }}
+                className={`px-6 py-3 rounded-lg font-bold transition ${
+                  currentTier === 2
+                    ? 'bg-gray-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                II Liga
+              </button>
+            </div>
+
+            <div className="flex gap-2 flex-wrap">
+              {currentGroups.map((group, idx) => (
+                <button
+                  key={group.id}
+                  onClick={() => setSelectedGroup(idx)}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    selectedGroup === idx
+                      ? currentTier === 1 ? 'bg-yellow-500 text-white' : 'bg-gray-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Grupa {group.name}
+                </button>
               ))}
             </div>
-            <button
-              onClick={() => setShowTeamManagement(false)}
-              className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
-            >
-              Zamknij
-            </button>
           </div>
+
+          <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Grupa {currentGroups[selectedGroup]?.name} - Tabela
+            </h2>
+            {renderGroupTable(currentGroups[selectedGroup]?.teams, currentPhase, currentGroups[selectedGroup]?.id)}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Grupa {currentGroups[selectedGroup]?.name} - Mecze
+            </h2>
+            {renderGroupMatches(currentGroups[selectedGroup]?.id, currentPhase)}
+          </div>
+
+          {allMatchesCompleted && (
+            <div className="bg-white rounded-xl shadow-xl p-6">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Award className="text-yellow-500" />
+                {currentTier === 1 ? 'I Liga - Zakończona' : 'II Liga - Zakończona'}
+              </h2>
+              <div className="text-center text-green-600 font-semibold text-lg">
+                Wszystkie mecze rozegrane! Zobacz tabele powyżej.
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
-  );
+
+        {showTeamManagement && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4">Zarządzanie drużynami</h2>
+              <div className="space-y-2 mb-4">
+                {teams.map(team => (
+                  <div key={team.id} className="flex items-center gap-2 p-2 border rounded">
+                    {editingTeam?.id === team.id ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editingTeam.name}
+                          onChange={(e) => setEditingTeam({ ...editingTeam, name: e.target.value })}
+                          className="flex-1 px-2 py-1 border rounded"
+                        />
+                        <button onClick={saveTeamName} className="bg-green-500 text-white px-3 py-1 rounded">✓</button>
+                        <button onClick={() => setEditingTeam(null)} className="bg-gray-300 px-3 py-1 rounded">✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1">{team.name}</span>
+                        <button
+                          onClick={() => setEditingTeam(team)}
+                          className="bg-blue-500 text-white px-3 py-1 rounded flex items-center gap-1"
+                        >
+                          <Edit2 size={16} /> Edytuj
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowTeamManagement(false)}
+                className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Zamknij
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
