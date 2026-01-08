@@ -4,7 +4,7 @@ import { Save, Upload, Download, Users, Award, ArrowRight, RotateCcw, Edit2, Tra
 export default function GroupStageTournament() {
   const STORAGE_KEY = 'group_stage_tournament_v2';
 
-  // Kroki: 0=setup, 1=team names, 2=qualifying, 3=finals
+  // Kroki: 0=setup, 1=team names, 2=qualifying, 3=finals, 4=playoff
   const [step, setStep] = useState(0);
   
   // Setup
@@ -17,6 +17,13 @@ export default function GroupStageTournament() {
   const [pointsDraw, setPointsDraw] = useState(1);
   const [matchesPerPair, setMatchesPerPair] = useState(1);
   const [teamNamesInput, setTeamNamesInput] = useState('');
+  
+  // Playoff
+  const [hasPlayoff, setHasPlayoff] = useState(false);
+  const [playoffType, setPlayoffType] = useState('final'); // 'final', 'semis', 'mini-league', 'bracket'
+  const [playoffTeamsCount, setPlayoffTeamsCount] = useState(4);
+  const [playoffMatches, setPlayoffMatches] = useState([]);
+  const [playoffResults, setPlayoffResults] = useState({});
 
   // Dane
   const [teams, setTeams] = useState([]);
@@ -44,14 +51,16 @@ export default function GroupStageTournament() {
       const state = {
         step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
         pointsWin, pointsDraw, matchesPerPair, teamNamesInput, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
-        tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier
+        tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier,
+        hasPlayoff, playoffType, playoffTeamsCount, playoffMatches, playoffResults
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }, 500);
     return () => clearTimeout(saveTimer);
   }, [step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
       pointsWin, pointsDraw, matchesPerPair, teamNamesInput, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
-      tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier]);
+      tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier,
+      hasPlayoff, playoffType, playoffTeamsCount, playoffMatches, playoffResults]);
 
   // Load from localStorage
   useEffect(() => {
@@ -80,6 +89,11 @@ export default function GroupStageTournament() {
         setTier2Matches(state.tier2Matches || {});
         setTier2Results(state.tier2Results || {});
         setCurrentTier(state.currentTier || 1);
+        setHasPlayoff(state.hasPlayoff || false);
+        setPlayoffType(state.playoffType || 'final');
+        setPlayoffTeamsCount(state.playoffTeamsCount || 4);
+        setPlayoffMatches(state.playoffMatches || []);
+        setPlayoffResults(state.playoffResults || {});
       } catch (e) {
         console.error('Błąd wczytywania:', e);
       }
@@ -485,6 +499,158 @@ export default function GroupStageTournament() {
     return ranking;
   };
 
+  // Generowanie playoff
+  const generatePlayoff = () => {
+    if (!hasPlayoff) return;
+
+    const tier1Ranking = [];
+    tier1GroupsData.forEach(group => {
+      const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
+      sorted.forEach((teamId, position) => {
+        const team = teams.find(t => t.id === teamId);
+        tier1Ranking.push({ ...team, groupId: group.id, groupName: group.name, position: position + 1 });
+      });
+    });
+
+    let playoffTeams = [];
+    const matches = [];
+    const results = {};
+
+    if (tier1Groups === 2 && playoffType === 'final') {
+      // Finał: 1. z grupy A vs 1. z grupy B
+      const group1Winners = tier1Ranking.filter(t => t.groupId === tier1GroupsData[0].id && t.position === 1);
+      const group2Winners = tier1Ranking.filter(t => t.groupId === tier1GroupsData[1].id && t.position === 1);
+      
+      playoffTeams = [group1Winners[0], group2Winners[0]];
+      matches.push({
+        team1: group1Winners[0].name,
+        team2: group2Winners[0].name,
+        type: 'final'
+      });
+
+    } else if (tier1Groups === 2 && playoffType === 'semis') {
+      // Półfinały: 1. A vs 2. B, 1. B vs 2. A
+      const group1Teams = tier1Ranking.filter(t => t.groupId === tier1GroupsData[0].id).slice(0, 2);
+      const group2Teams = tier1Ranking.filter(t => t.groupId === tier1GroupsData[1].id).slice(0, 2);
+      
+      playoffTeams = [...group1Teams, ...group2Teams];
+      
+      matches.push({
+        team1: group1Teams[0].name,
+        team2: group2Teams[1].name,
+        type: 'semi'
+      });
+      matches.push({
+        team1: group2Teams[0].name,
+        team2: group1Teams[1].name,
+        type: 'semi'
+      });
+      matches.push({
+        team1: 'Zwycięzca SF1',
+        team2: 'Zwycięzca SF2',
+        type: 'final'
+      });
+      matches.push({
+        team1: 'Przegrany SF1',
+        team2: 'Przegrany SF2',
+        type: 'third'
+      });
+
+    } else if (tier1Groups === 2 && playoffType === 'placement') {
+      // Mecze o miejsca: 1. A vs 1. B (o miejsca 1-2), 2. A vs 2. B (o miejsca 3-4), itd.
+      const group1Teams = tier1Ranking.filter(t => t.groupId === tier1GroupsData[0].id);
+      const group2Teams = tier1Ranking.filter(t => t.groupId === tier1GroupsData[1].id);
+      
+      const maxTeams = Math.min(group1Teams.length, group2Teams.length);
+      playoffTeams = [...group1Teams.slice(0, maxTeams), ...group2Teams.slice(0, maxTeams)];
+      
+      for (let i = 0; i < maxTeams; i++) {
+        const place1 = i * 2 + 1;
+        const place2 = i * 2 + 2;
+        matches.push({
+          team1: group1Teams[i].name,
+          team2: group2Teams[i].name,
+          type: 'placement',
+          label: `Mecz o miejsca ${place1}-${place2}`,
+          places: `${place1}-${place2}`
+        });
+      }
+
+    } else if (tier1Groups % 2 === 1 && playoffType === 'mini-league') {
+      // Mini liga: zwycięzcy grup grają każdy z każdym
+      const winners = tier1Ranking.filter(t => t.position === 1);
+      playoffTeams = winners;
+      
+      // Generuj mecze round-robin
+      for (let i = 0; i < winners.length; i++) {
+        for (let j = i + 1; j < winners.length; j++) {
+          matches.push({
+            team1: winners[i].name,
+            team2: winners[j].name,
+            type: 'league'
+          });
+        }
+      }
+
+    } else if (playoffType === 'bracket') {
+      // Drabinka playoff - zbierz top N drużyn
+      const teamsPerGroup = Math.ceil(playoffTeamsCount / tier1Groups);
+      
+      tier1GroupsData.forEach(group => {
+        const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
+        sorted.slice(0, teamsPerGroup).forEach(teamId => {
+          const team = teams.find(t => t.id === teamId);
+          if (team && playoffTeams.length < playoffTeamsCount) {
+            playoffTeams.push(team);
+          }
+        });
+      });
+
+      // Generuj drabinkę
+      for (let i = 0; i < playoffTeamsCount / 2; i++) {
+        const label = playoffTeamsCount === 4 ? '1/2 finału' : 
+                      playoffTeamsCount === 8 ? '1/4 finału' :
+                      playoffTeamsCount === 16 ? '1/8 finału' : '1/16 finału';
+        matches.push({
+          team1: playoffTeams[i * 2]?.name || 'TBD',
+          team2: playoffTeams[i * 2 + 1]?.name || 'TBD',
+          type: 'bracket',
+          label: `${label} - Mecz ${i + 1}`
+        });
+      }
+    }
+
+    setPlayoffMatches(matches);
+    setStep(4); // Przejdź do playoff
+  };
+
+  // useEffect do aktualizacji nazw drużyn w finałach po zatwierdzeniu półfinałów
+  useEffect(() => {
+    if (playoffType === 'semis' && playoffMatches.length === 4) {
+      const semi0confirmed = playoffResults['playoff_semi0_confirmed'];
+      const semi1confirmed = playoffResults['playoff_semi1_confirmed'];
+      
+      if (semi0confirmed && semi1confirmed) {
+        const score0_1 = parseInt(playoffResults['playoff_semi0_team1']) || 0;
+        const score0_2 = parseInt(playoffResults['playoff_semi0_team2']) || 0;
+        const score1_1 = parseInt(playoffResults['playoff_semi1_team1']) || 0;
+        const score1_2 = parseInt(playoffResults['playoff_semi1_team2']) || 0;
+        
+        const winner0 = score0_1 > score0_2 ? playoffMatches[0].team1 : playoffMatches[0].team2;
+        const loser0 = score0_1 > score0_2 ? playoffMatches[0].team2 : playoffMatches[0].team1;
+        const winner1 = score1_1 > score1_2 ? playoffMatches[1].team1 : playoffMatches[1].team2;
+        const loser1 = score1_1 > score1_2 ? playoffMatches[1].team2 : playoffMatches[1].team1;
+        
+        setPlayoffMatches(prev => {
+          const updated = [...prev];
+          updated[2] = { ...updated[2], team1: winner0, team2: winner1 };
+          updated[3] = { ...updated[3], team1: loser0, team2: loser1 };
+          return updated;
+        });
+      }
+    }
+  }, [playoffResults, playoffType, playoffMatches.length]);
+
   const resetTournament = () => {
     if (window.confirm('Czy na pewno chcesz zresetować turniej?')) {
       localStorage.removeItem(STORAGE_KEY);
@@ -859,13 +1025,100 @@ export default function GroupStageTournament() {
                 </div>
               </div>
 
+              {/* Faza pucharowa */}
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="hasPlayoff"
+                    checked={hasPlayoff}
+                    onChange={(e) => {
+                      setHasPlayoff(e.target.checked);
+                      if (e.target.checked && tier1Groups === 2) {
+                        setPlayoffType('semis');
+                      } else if (e.target.checked && tier1Groups % 2 === 1) {
+                        setPlayoffType('mini-league');
+                      } else if (e.target.checked) {
+                        setPlayoffType('bracket');
+                      }
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="hasPlayoff" className="font-bold text-green-900 cursor-pointer">
+                    Faza pucharowa po I Lidze
+                  </label>
+                </div>
+
+                {hasPlayoff && (
+                  <div className="space-y-3 mt-3">
+                    {tier1Groups === 2 && (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Format playoff (2 grupy):
+                        </label>
+                        <select
+                          value={playoffType}
+                          onChange={(e) => setPlayoffType(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="final">Finał (1. vs 1.)</option>
+                          <option value="semis">Półfinały + Finał (1. vs 2.)</option>
+                          <option value="placement">Mecze o miejsca (1-4, 5-8, ...)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {tier1Groups % 2 === 1 && (
+                      <div className="text-sm text-green-800">
+                        <strong>Mini liga finałowa:</strong> Zwycięzcy grup I Ligi zagrają każdy z każdym
+                      </div>
+                    )}
+
+                    {tier1Groups !== 2 && tier1Groups % 2 === 0 && (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Liczba drużyn w playoff:
+                        </label>
+                        <select
+                          value={playoffTeamsCount}
+                          onChange={(e) => {
+                            const count = parseInt(e.target.value);
+                            setPlayoffTeamsCount(count);
+                            setPlayoffType('bracket');
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value={4}>4 drużyny (1/2 finału)</option>
+                          <option value={8}>8 drużyn (1/4 finału)</option>
+                          <option value={16}>16 drużyn (1/8 finału)</option>
+                          <option value={32}>32 drużyny (1/16 finału)</option>
+                        </select>
+                        <p className="text-xs text-gray-600 mt-2">
+                          Po {Math.ceil(playoffTeamsCount / tier1Groups)} najlepszych z każdej grupy
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
                   <strong>Podsumowanie:</strong><br />
                   • {totalTeams} drużyn w {numQualGroups} grupach kwalifikacyjnych<br />
                   • I Liga: {tier1Groups} grup × {tier1TeamsPerGroup} drużyn = {tier1Total} miejsc<br />
                   • II Liga: {tier2Groups} {tier2Groups === 1 ? 'grupa' : 'grup'}, {tier2Total > 0 ? tier2Total : 0} drużyn<br />
-                  • Wszystkie drużyny awansują do kolejnej fazy
+                  • Wszystkie drużyny awansują do kolejnej fazy<br />
+                  {hasPlayoff && (
+                    <>
+                      • <strong className="text-green-700">Faza pucharowa: </strong>
+                      {tier1Groups === 2 && playoffType === 'final' && 'Finał (1. vs 1.)'}
+                      {tier1Groups === 2 && playoffType === 'semis' && 'Półfinały + Finał'}
+                      {tier1Groups === 2 && playoffType === 'placement' && 'Mecze o miejsca (1-4, 5-8, ...)'}
+                      {tier1Groups % 2 === 1 && 'Mini liga finałowa'}
+                      {tier1Groups !== 2 && tier1Groups % 2 === 0 && `Drabinka ${playoffTeamsCount} drużyn`}
+                    </>
+                  )}
                   {tier2Total < 0 && <span className="text-red-600 block mt-2">⚠️ Błąd: Więcej miejsc w I lidze niż drużyn!</span>}
                 </p>
               </div>
@@ -1184,7 +1437,29 @@ export default function GroupStageTournament() {
             </div>
           )}
 
-          {allFinalsCompleted && (
+          {allFinalsCompleted && hasPlayoff && (
+            <div className="bg-green-50 border-2 border-green-500 rounded-xl shadow-xl p-6 mb-6">
+              <h2 className="text-2xl font-bold text-green-800 mb-4 flex items-center gap-2 justify-center">
+                <Trophy className="text-green-600" />
+                Faza Pucharowa
+              </h2>
+              <p className="text-center text-gray-700 mb-4">
+                {tier1Groups === 2 && playoffType === 'final' && 'Finał między zwycięzcami grup'}
+                {tier1Groups === 2 && playoffType === 'semis' && 'Półfinały i Finał'}
+                {tier1Groups === 2 && playoffType === 'placement' && 'Mecze o miejsca 1-4, 5-8, ...'}
+                {tier1Groups % 2 === 1 && 'Mini liga finałowa - najlepsi z każdej grupy'}
+                {tier1Groups !== 2 && tier1Groups % 2 === 0 && `Drabinka ${playoffTeamsCount} najlepszych drużyn`}
+              </p>
+              <button
+                onClick={generatePlayoff}
+                className="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 shadow-lg flex items-center justify-center gap-2"
+              >
+                Rozpocznij fazę pucharową <ArrowRight size={24} />
+              </button>
+            </div>
+          )}
+
+          {allFinalsCompleted && !hasPlayoff && (
             <div className="bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl shadow-2xl p-8 mb-6">
               <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center flex items-center justify-center gap-3">
                 <Trophy className="text-yellow-500" size={36} />
@@ -1288,6 +1563,394 @@ export default function GroupStageTournament() {
             </div>
           )}
         </div>
+
+        {/* ============= KROK 4: FAZA PUCHAROWA ============= */}
+        {step === 4 && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-bold text-center">Faza pucharowa</h2>
+            
+            {playoffType === 'final' && (
+              <div className="space-y-4">
+                <h3 className="text-2xl font-bold text-center mb-4">🏆 Finał</h3>
+                {playoffMatches.map((match, idx) => (
+                  <div key={idx} className="bg-white border-2 border-yellow-400 rounded-lg p-6 shadow-lg">
+                    <h4 className="text-xl font-bold text-center mb-4">Mecz finałowy</h4>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team1}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team1`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team1`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                      <div className="text-3xl font-bold">VS</div>
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team2}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team2`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team2`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                    </div>
+                    {playoffResults[`playoff_${idx}_confirmed`] && (
+                      <div className="mt-4 text-center">
+                        <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                          ✓ Wynik zatwierdzony
+                        </span>
+                      </div>
+                    )}
+                    {!playoffResults[`playoff_${idx}_confirmed`] && 
+                     playoffResults[`playoff_${idx}_team1`] && 
+                     playoffResults[`playoff_${idx}_team2`] && (
+                      <button
+                        onClick={() => {
+                          setPlayoffResults({ ...playoffResults, [`playoff_${idx}_confirmed`]: true });
+                        }}
+                        className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                      >
+                        Zatwierdź wynik
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {playoffType === 'semis' && (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-2xl font-bold text-center mb-4">Półfinały</h3>
+                  {playoffMatches.filter(m => m.type === 'semi').map((match, idx) => (
+                    <div key={idx} className="bg-white border-2 border-blue-400 rounded-lg p-6 shadow-lg">
+                      <h4 className="text-xl font-bold text-center mb-4">Półfinał {idx + 1}</h4>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1 text-center">
+                          <div className="font-bold text-lg">{match.team1}</div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={playoffResults[`playoff_semi${idx}_team1`] || ''}
+                            onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_semi${idx}_team1`]: e.target.value })}
+                            className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                          />
+                        </div>
+                        <div className="text-3xl font-bold">VS</div>
+                        <div className="flex-1 text-center">
+                          <div className="font-bold text-lg">{match.team2}</div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={playoffResults[`playoff_semi${idx}_team2`] || ''}
+                            onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_semi${idx}_team2`]: e.target.value })}
+                            className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                          />
+                        </div>
+                      </div>
+                      {playoffResults[`playoff_semi${idx}_confirmed`] && (
+                        <div className="mt-4 text-center">
+                          <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                            ✓ Wynik zatwierdzony
+                          </span>
+                        </div>
+                      )}
+                      {!playoffResults[`playoff_semi${idx}_confirmed`] && 
+                       playoffResults[`playoff_semi${idx}_team1`] && 
+                       playoffResults[`playoff_semi${idx}_team2`] && (
+                        <button
+                          onClick={() => {
+                            setPlayoffResults({ ...playoffResults, [`playoff_semi${idx}_confirmed`]: true });
+                          }}
+                          className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                        >
+                          Zatwierdź wynik
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {playoffResults['playoff_semi0_confirmed'] && playoffResults['playoff_semi1_confirmed'] && (
+                  <>
+                    <div className="space-y-4">
+                      <h3 className="text-2xl font-bold text-center mb-4">🥉 Mecz o 3. miejsce</h3>
+                      {playoffMatches.filter(m => m.type === 'third').map((match, idx) => (
+                        <div key={idx} className="bg-white border-2 border-orange-400 rounded-lg p-6 shadow-lg">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1 text-center">
+                              <div className="font-bold text-lg">{match.team1}</div>
+                              <input
+                                type="number"
+                                min="0"
+                                value={playoffResults[`playoff_third_team1`] || ''}
+                                onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_third_team1`]: e.target.value })}
+                                className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                              />
+                            </div>
+                            <div className="text-3xl font-bold">VS</div>
+                            <div className="flex-1 text-center">
+                              <div className="font-bold text-lg">{match.team2}</div>
+                              <input
+                                type="number"
+                                min="0"
+                                value={playoffResults[`playoff_third_team2`] || ''}
+                                onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_third_team2`]: e.target.value })}
+                                className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                              />
+                            </div>
+                          </div>
+                          {playoffResults[`playoff_third_confirmed`] && (
+                            <div className="mt-4 text-center">
+                              <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                                ✓ Wynik zatwierdzony
+                              </span>
+                            </div>
+                          )}
+                          {!playoffResults[`playoff_third_confirmed`] && 
+                           playoffResults[`playoff_third_team1`] && 
+                           playoffResults[`playoff_third_team2`] && (
+                            <button
+                              onClick={() => {
+                                setPlayoffResults({ ...playoffResults, [`playoff_third_confirmed`]: true });
+                              }}
+                              className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                            >
+                              Zatwierdź wynik
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4">
+                      <h3 className="text-2xl font-bold text-center mb-4">🏆 Finał</h3>
+                      {playoffMatches.filter(m => m.type === 'final').map((match, idx) => (
+                        <div key={idx} className="bg-white border-2 border-yellow-400 rounded-lg p-6 shadow-lg">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1 text-center">
+                              <div className="font-bold text-lg">{match.team1}</div>
+                              <input
+                                type="number"
+                                min="0"
+                                value={playoffResults[`playoff_final_team1`] || ''}
+                                onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_final_team1`]: e.target.value })}
+                                className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                              />
+                            </div>
+                            <div className="text-3xl font-bold">VS</div>
+                            <div className="flex-1 text-center">
+                              <div className="font-bold text-lg">{match.team2}</div>
+                              <input
+                                type="number"
+                                min="0"
+                                value={playoffResults[`playoff_final_team2`] || ''}
+                                onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_final_team2`]: e.target.value })}
+                                className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                              />
+                            </div>
+                          </div>
+                          {playoffResults[`playoff_final_confirmed`] && (
+                            <div className="mt-4 text-center">
+                              <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                                ✓ Wynik zatwierdzony
+                              </span>
+                            </div>
+                          )}
+                          {!playoffResults[`playoff_final_confirmed`] && 
+                           playoffResults[`playoff_final_team1`] && 
+                           playoffResults[`playoff_final_team2`] && (
+                            <button
+                              onClick={() => {
+                                setPlayoffResults({ ...playoffResults, [`playoff_final_confirmed`]: true });
+                              }}
+                              className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded"
+                            >
+                              Zatwierdź wynik
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {playoffType === 'placement' && (
+              <div className="space-y-4">
+                <h3 className="text-2xl font-bold text-center mb-4">🏆 Mecze o miejsca</h3>
+                <p className="text-center text-gray-600 mb-4">Każda pozycja z grupy A vs ta sama pozycja z grupy B</p>
+                {playoffMatches.map((match, idx) => (
+                  <div key={idx} className="bg-white border-2 border-indigo-400 rounded-lg p-6 shadow-lg">
+                    <h4 className="text-lg font-bold text-center mb-4 text-indigo-600">{match.label}</h4>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team1}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team1`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team1`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                      <div className="text-3xl font-bold">VS</div>
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team2}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team2`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team2`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                    </div>
+                    {playoffResults[`playoff_${idx}_confirmed`] && (
+                      <div className="mt-4 text-center">
+                        <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                          ✓ Wynik zatwierdzony
+                        </span>
+                      </div>
+                    )}
+                    {!playoffResults[`playoff_${idx}_confirmed`] && 
+                     playoffResults[`playoff_${idx}_team1`] && 
+                     playoffResults[`playoff_${idx}_team2`] && (
+                      <button
+                        onClick={() => {
+                          setPlayoffResults({ ...playoffResults, [`playoff_${idx}_confirmed`]: true });
+                        }}
+                        className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                      >
+                        Zatwierdź wynik
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {playoffType === 'mini-league' && (
+              <div className="space-y-4">
+                <h3 className="text-2xl font-bold text-center mb-4">🏆 Mini Liga Finałowa</h3>
+                <p className="text-center text-gray-600 mb-4">Każdy z każdym - system kołowy</p>
+                {playoffMatches.map((match, idx) => (
+                  <div key={idx} className="bg-white border-2 border-green-400 rounded-lg p-6 shadow-lg">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team1}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team1`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team1`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                      <div className="text-3xl font-bold">VS</div>
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team2}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team2`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team2`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                    </div>
+                    {playoffResults[`playoff_${idx}_confirmed`] && (
+                      <div className="mt-4 text-center">
+                        <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                          ✓ Wynik zatwierdzony
+                        </span>
+                      </div>
+                    )}
+                    {!playoffResults[`playoff_${idx}_confirmed`] && 
+                     playoffResults[`playoff_${idx}_team1`] && 
+                     playoffResults[`playoff_${idx}_team2`] && (
+                      <button
+                        onClick={() => {
+                          setPlayoffResults({ ...playoffResults, [`playoff_${idx}_confirmed`]: true });
+                        }}
+                        className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                      >
+                        Zatwierdź wynik
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {playoffType === 'bracket' && (
+              <div className="space-y-4">
+                <h3 className="text-2xl font-bold text-center mb-4">🏆 Drabinka pucharowa ({playoffTeamsCount} drużyn)</h3>
+                {playoffMatches.map((match, idx) => (
+                  <div key={idx} className="bg-white border-2 border-purple-400 rounded-lg p-6 shadow-lg">
+                    <h4 className="text-lg font-bold text-center mb-4">{match.label || `Mecz ${idx + 1}`}</h4>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team1}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team1`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team1`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                      <div className="text-3xl font-bold">VS</div>
+                      <div className="flex-1 text-center">
+                        <div className="font-bold text-lg">{match.team2}</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={playoffResults[`playoff_${idx}_team2`] || ''}
+                          onChange={(e) => setPlayoffResults({ ...playoffResults, [`playoff_${idx}_team2`]: e.target.value })}
+                          className="w-20 text-center border-2 border-gray-300 rounded p-2 text-xl font-bold mt-2"
+                        />
+                      </div>
+                    </div>
+                    {playoffResults[`playoff_${idx}_confirmed`] && (
+                      <div className="mt-4 text-center">
+                        <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold">
+                          ✓ Wynik zatwierdzony
+                        </span>
+                      </div>
+                    )}
+                    {!playoffResults[`playoff_${idx}_confirmed`] && 
+                     playoffResults[`playoff_${idx}_team1`] && 
+                     playoffResults[`playoff_${idx}_team2`] && (
+                      <button
+                        onClick={() => {
+                          setPlayoffResults({ ...playoffResults, [`playoff_${idx}_confirmed`]: true });
+                        }}
+                        className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                      >
+                        Zatwierdź wynik
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="text-center mt-8">
+              <button
+                onClick={() => setStep(3)}
+                className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg mr-4"
+              >
+                ← Powrót do finałów
+              </button>
+            </div>
+          </div>
+        )}
 
         {showTeamManagement && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
