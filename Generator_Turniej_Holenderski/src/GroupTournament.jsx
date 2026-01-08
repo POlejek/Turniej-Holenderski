@@ -457,36 +457,123 @@ export default function GroupTournament() {
       return teamData;
     });
 
-    setTeams(updatedTeams);
-
     // Oznacz rundę jako ukończoną
-    setSwissResults(prev => {
-      const updated = { ...prev };
-      roundMatches.forEach(match => {
-        if (updated[match.id]) {
-          updated[match.id].completed = true;
-        }
-      });
-      return updated;
+    const updatedResults = { ...swissResults };
+    roundMatches.forEach(match => {
+      if (updatedResults[match.id]) {
+        updatedResults[match.id].completed = true;
+      }
     });
 
-    // Jeśli to nie ostatnia runda, wygeneruj następną
+    // Jeśli to nie ostatnia runda, wygeneruj następną z zaktualizowanymi drużynami
     const totalRounds = parseInt(swissRounds);
     if (roundNumber < totalRounds) {
-      const nextRound = generateSwissPairings(roundNumber + 1);
-      setSwissMatches(prev => [...prev, nextRound]);
+      // Najpierw zaktualizuj drużyny, potem generuj parowania
+      setTeams(updatedTeams);
+      
+      // Generuj następną rundę z użyciem zaktualizowanych drużyn
+      const teamsCopy = updatedTeams.map(t => ({
+        ...t,
+        swissPoints: t.swissPoints || 0,
+        swissOpponents: t.swissOpponents || [],
+        byeCount: t.byeCount || 0
+      }));
+      
+      // Sortuj drużyny wg punktów
+      const sortedTeams = [...teamsCopy].sort((a, b) => {
+        if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
+        const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
+        const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
+        return bDiff - aDiff;
+      });
+
+      const nextRoundPairings = [];
+      const used = new Set();
+
+      // Obsługa bye
+      if (sortedTeams.length % 2 !== 0) {
+        const byeCandidates = sortedTeams.filter(t => !used.has(t.id));
+        byeCandidates.sort((a, b) => a.byeCount - b.byeCount);
+        
+        const byeTeam = byeCandidates[0];
+        if (byeTeam) {
+          nextRoundPairings.push({
+            id: `r${roundNumber + 1}-bye-${byeTeam.id}`,
+            round: roundNumber + 1,
+            teamA: byeTeam.id,
+            teamB: null,
+            isBye: true,
+            scoreA: null,
+            scoreB: null
+          });
+          used.add(byeTeam.id);
+        }
+      }
+
+      // Parowanie
+      for (let i = 0; i < sortedTeams.length; i++) {
+        const teamA = sortedTeams[i];
+        if (used.has(teamA.id)) continue;
+
+        let paired = false;
+        for (let j = i + 1; j < sortedTeams.length; j++) {
+          const teamB = sortedTeams[j];
+          if (used.has(teamB.id)) continue;
+
+          if (!teamA.swissOpponents.includes(teamB.id)) {
+            nextRoundPairings.push({
+              id: `r${roundNumber + 1}-${teamA.id}-${teamB.id}`,
+              round: roundNumber + 1,
+              teamA: teamA.id,
+              teamB: teamB.id,
+              isBye: false,
+              scoreA: '',
+              scoreB: ''
+            });
+            used.add(teamA.id);
+            used.add(teamB.id);
+            paired = true;
+            break;
+          }
+        }
+
+        if (!paired) {
+          for (let j = i + 1; j < sortedTeams.length; j++) {
+            const teamB = sortedTeams[j];
+            if (used.has(teamB.id)) continue;
+            
+            nextRoundPairings.push({
+              id: `r${roundNumber + 1}-${teamA.id}-${teamB.id}`,
+              round: roundNumber + 1,
+              teamA: teamA.id,
+              teamB: teamB.id,
+              isBye: false,
+              scoreA: '',
+              scoreB: '',
+              isRematch: true
+            });
+            used.add(teamA.id);
+            used.add(teamB.id);
+            break;
+          }
+        }
+      }
+
+      setSwissMatches(prev => [...prev, nextRoundPairings]);
       
       // Inicjalizuj wyniki następnej rundy
       const newResults = {};
-      nextRound.forEach(match => {
+      nextRoundPairings.forEach(match => {
         newResults[match.id] = { scoreA: '', scoreB: '', completed: false };
       });
-      setSwissResults(prev => ({ ...prev, ...newResults }));
+      setSwissResults({ ...updatedResults, ...newResults });
       
       setCurrentSwissRound(roundNumber + 1);
       setSelectedRound(roundNumber + 1);
     } else {
-      // Wszystkie rundy Swiss zakończone - przejdź do playoff
+      // Ostatnia runda - tylko zaktualizuj
+      setTeams(updatedTeams);
+      setSwissResults(updatedResults);
       alert('Faza Swiss zakończona! Teraz zostanie wygenerowana faza playoff.');
     }
   };
