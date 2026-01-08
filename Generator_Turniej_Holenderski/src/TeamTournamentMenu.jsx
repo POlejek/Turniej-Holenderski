@@ -92,10 +92,10 @@ export default function TeamTournamentMenu({ onBack }) {
                   Turniej Grupowy
                 </h2>
                 <p className="text-sm sm:text-base text-purple-100">
-                  Faza grupowa + faza pucharowa
+                  System Swiss + Playoff
                 </p>
                 <div className="pt-2 text-xs sm:text-sm text-purple-200">
-                  🎯 Grupy<br />
+                  🔄 Parowanie wg punktów<br />
                   🏆 Play-off<br />
                   👑 Wielki finał
                 </div>
