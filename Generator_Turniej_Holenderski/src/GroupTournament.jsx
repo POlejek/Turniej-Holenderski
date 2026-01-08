@@ -1481,12 +1481,12 @@ export default function GroupTournament() {
                         <span className={`font-semibold ${teamA?.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
                           {teamA?.name}
                         </span>
-                        <span className="ml-2 text-sm text-gray-600">(BYE - walkower)</span>
+                        <span className="ml-2 text-sm text-gray-600">(BYE)</span>
                       </div>
                     ) : (
                       <>
                         <div className="flex items-center justify-between gap-4">
-                          <div className={`flex-1 text-right font-semibold ${teamA?.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
+                          <div className={`flex-1 text-right font-semibold ${teamA?.withdrawn ? 'text-red-500' : 'text-gray-800'}`}>
                             {teamA?.name || '?'}
                           </div>
                           <div className="flex items-center gap-2">
@@ -1495,7 +1495,7 @@ export default function GroupTournament() {
                               min="0"
                               value={result.scoreA ?? ''}
                               onChange={(e) => updateSwissScore(match.id, 'scoreA', e.target.value)}
-                              disabled={result.completed || teamA?.withdrawn || teamB?.withdrawn}
+                              disabled={result.completed}
                               className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 disabled:bg-gray-200"
                             />
                             <span className="font-bold text-gray-600">:</span>
@@ -1504,11 +1504,11 @@ export default function GroupTournament() {
                               min="0"
                               value={result.scoreB ?? ''}
                               onChange={(e) => updateSwissScore(match.id, 'scoreB', e.target.value)}
-                              disabled={result.completed || teamA?.withdrawn || teamB?.withdrawn}
+                              disabled={result.completed}
                               className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 disabled:bg-gray-200"
                             />
                           </div>
-                          <div className={`flex-1 text-left font-semibold ${teamB?.withdrawn ? 'text-red-500 line-through' : 'text-gray-800'}`}>
+                          <div className={`flex-1 text-left font-semibold ${teamB?.withdrawn ? 'text-red-500' : 'text-gray-800'}`}>
                             {teamB?.name || '?'}
                           </div>
                         </div>
