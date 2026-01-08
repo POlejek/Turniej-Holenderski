@@ -395,9 +395,96 @@ export default function TournamentScheduler() {
       }
     });
 
+    // Funkcja pomocnicza do sprawdzenia bezpośrednich meczów
+    const getHeadToHeadResult = (teamA, teamB) => {
+      let teamAPoints = 0;
+      let teamBPoints = 0;
+      let teamAGoalsFor = 0;
+      let teamAGoalsAgainst = 0;
+      let teamBGoalsFor = 0;
+      let teamBGoalsAgainst = 0;
+      let matchesPlayed = 0;
+
+      schedule.forEach(match => {
+        // Pomiń mecze z pauzą
+        if ((match.home && match.home.isPause) || (match.away && match.away.isPause)) {
+          return;
+        }
+
+        const result = results[match.id];
+        if (!result || result.homeScore === null || result.awayScore === null) return;
+
+        // Sprawdź czy to mecz między tymi drużynami
+        if ((match.home.id === teamA.id && match.away.id === teamB.id) ||
+            (match.home.id === teamB.id && match.away.id === teamA.id)) {
+          matchesPlayed++;
+          
+          const homeScore = result.homeScore;
+          const awayScore = result.awayScore;
+          
+          if (match.home.id === teamA.id) {
+            teamAGoalsFor += homeScore;
+            teamAGoalsAgainst += awayScore;
+            teamBGoalsFor += awayScore;
+            teamBGoalsAgainst += homeScore;
+            
+            if (homeScore > awayScore) teamAPoints += 3;
+            else if (homeScore === awayScore) {
+              teamAPoints += 1;
+              teamBPoints += 1;
+            } else teamBPoints += 3;
+          } else {
+            teamBGoalsFor += homeScore;
+            teamBGoalsAgainst += awayScore;
+            teamAGoalsFor += awayScore;
+            teamAGoalsAgainst += homeScore;
+            
+            if (homeScore > awayScore) teamBPoints += 3;
+            else if (homeScore === awayScore) {
+              teamAPoints += 1;
+              teamBPoints += 1;
+            } else teamAPoints += 3;
+          }
+        }
+      });
+
+      if (matchesPlayed === 0) return null;
+
+      return {
+        teamAPoints,
+        teamBPoints,
+        teamAGoalDiff: teamAGoalsFor - teamAGoalsAgainst,
+        teamBGoalDiff: teamBGoalsFor - teamBGoalsAgainst,
+        teamAGoalsFor,
+        teamBGoalsFor
+      };
+    };
+
     return standings.sort((a, b) => {
+      // 1. Punkty
       if (b.points !== a.points) return b.points - a.points;
+      
+      // 2. Bezpośredni mecz (jeśli się odbył)
+      const headToHead = getHeadToHeadResult(a, b);
+      if (headToHead) {
+        // Porównaj punkty z bezpośrednich meczów
+        if (headToHead.teamAPoints !== headToHead.teamBPoints) {
+          return headToHead.teamBPoints - headToHead.teamAPoints;
+        }
+        // Jeśli punkty równe, porównaj bilans z bezpośrednich meczów
+        if (headToHead.teamAGoalDiff !== headToHead.teamBGoalDiff) {
+          return headToHead.teamBGoalDiff - headToHead.teamAGoalDiff;
+        }
+        // Jeśli bilans równy, porównaj bramki strzelone w bezpośrednich meczach
+        if (headToHead.teamAGoalsFor !== headToHead.teamBGoalsFor) {
+          return headToHead.teamBGoalsFor - headToHead.teamAGoalsFor;
+        }
+      }
+      
+      // 3. Bilans bramek (ogólny)
       if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+      
+      // 4. Bramki strzelone (ogólne)
       return b.goalsFor - a.goalsFor;
     });
   };
