@@ -59,6 +59,8 @@ export default function TournamentGenerator() {
   const [pointsDraw, setPointsDraw] = useState(5);
   const [pointsLoss, setPointsLoss] = useState(0);
   const [pointsPerGoal, setPointsPerGoal] = useState(1);
+  const [showPasteMode, setShowPasteMode] = useState(false);
+  const [pasteInput, setPasteInput] = useState('');
 
   // Debounced persist: save to localStorage 500ms after last change
   const saveTimeoutRef = useRef(null);
@@ -223,6 +225,24 @@ export default function TournamentGenerator() {
         setFinalStandings(updatedStandings);
       }
     }
+  };
+
+  const handlePasteSubmit = () => {
+    const lines = pasteInput.split('\n').map(line => line.trim()).filter(line => line !== '');
+    
+    if (lines.length !== numPlayers) {
+      alert(`Wklejono ${lines.length} imion, ale potrzeba ${numPlayers}. Popraw dane lub zmień liczbę zawodników.`);
+      return;
+    }
+    
+    setPlayerNames(lines);
+    setShowPasteMode(false);
+    setPasteInput('');
+  };
+
+  const handleManualEntry = () => {
+    setShowPasteMode(false);
+    setPasteInput('');
   };
 
   const shuffle = (array) => {
@@ -837,48 +857,106 @@ export default function TournamentGenerator() {
                 <Users className="w-5 h-5 sm:w-6 sm:h-6" />
                 Wprowadź imiona zawodników
               </h2>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-h-80 sm:max-h-96 overflow-y-auto p-2">
-                {playerNames.map((name, index) => (
-                  <input
-                    key={index}
-                    type="text"
-                    value={name}
-                    onChange={(e) => updatePlayerName(index, e.target.value)}
-                    placeholder={`Zawodnik ${index + 1}`}
-                    className={`px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${name.trim() === '' ? 'border-red-500' : 'border-gray-300'}`}
-                  />
-                ))}
-              </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <button
-                  onClick={() => setStep(returnStep || 1)}
-                  className="w-full bg-gray-200 text-gray-700 py-3 sm:py-4 rounded-lg hover:bg-gray-300 transition-colors font-medium text-base"
-                >
-                  {returnStep ? 'Powrót' : 'Wstecz'}
-                </button>
-                {!returnStep && (
-                  <button
-                    onClick={() => setStep(3)}
-                    className={`w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base ${playerNames.some(name => name.trim() === '') ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    disabled={playerNames.some(name => name.trim() === '')}
-                  >
-                    Dalej
-                  </button>
-                )}
-                {returnStep && (
-                  <button
-                    onClick={() => {
-                      setStep(returnStep);
-                      setReturnStep(null);
-                    }}
-                    className="w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base"
-                  >
-                    Zapisz zmiany
-                  </button>
-                )}
-              </div>
+              {!showPasteMode ? (
+                <>
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={() => setShowPasteMode(true)}
+                      className="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition-colors font-medium text-sm"
+                    >
+                      📋 Wklej z Excela
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-h-80 sm:max-h-96 overflow-y-auto p-2">
+                    {playerNames.map((name, index) => (
+                      <input
+                        key={index}
+                        type="text"
+                        value={name}
+                        onChange={(e) => updatePlayerName(index, e.target.value)}
+                        placeholder={`Zawodnik ${index + 1}`}
+                        className={`px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${name.trim() === '' ? 'border-red-500' : 'border-gray-300'}`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <button
+                      onClick={() => setStep(returnStep || 1)}
+                      className="w-full bg-gray-200 text-gray-700 py-3 sm:py-4 rounded-lg hover:bg-gray-300 transition-colors font-medium text-base"
+                    >
+                      {returnStep ? 'Powrót' : 'Wstecz'}
+                    </button>
+                    {!returnStep && (
+                      <button
+                        onClick={() => setStep(3)}
+                        className={`w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base ${playerNames.some(name => name.trim() === '') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={playerNames.some(name => name.trim() === '')}
+                      >
+                        Dalej
+                      </button>
+                    )}
+                    {returnStep && (
+                      <button
+                        onClick={() => {
+                          setStep(returnStep);
+                          setReturnStep(null);
+                        }}
+                        className="w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base"
+                      >
+                        Zapisz zmiany
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Wskazówki:</strong><br />
+                      • Każde imię w osobnej linii<br />
+                      • Możesz skopiować kolumnę z Excela i wkleić tutaj<br />
+                      • Aktualna liczba: <strong className={pasteInput.split('\n').filter(l => l.trim()).length === numPlayers ? 'text-green-600' : 'text-red-600'}>
+                        {pasteInput.split('\n').filter(l => l.trim()).length} / {numPlayers}
+                      </strong>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Lista zawodników (po jednym w linii):
+                    </label>
+                    <textarea
+                      value={pasteInput}
+                      onChange={(e) => setPasteInput(e.target.value)}
+                      rows={Math.min(numPlayers + 2, 20)}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg font-mono text-sm focus:border-indigo-500 focus:outline-none"
+                      placeholder={`Zawodnik 1\nZawodnik 2\nZawodnik 3\n...`}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      Wklej imiona z Excela lub wprowadź ręcznie
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={handleManualEntry}
+                      className="w-full bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    >
+                      Anuluj
+                    </button>
+                    <button
+                      onClick={handlePasteSubmit}
+                      disabled={pasteInput.split('\n').filter(l => l.trim()).length !== numPlayers}
+                      className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Zatwierdź i wprowadź imiona
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
