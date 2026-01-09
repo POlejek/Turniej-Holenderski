@@ -446,13 +446,20 @@ export default function GroupTournament() {
         byeCount: t.byeCount || 0
       }));
     
-    // Sortuj drużyny wg punktów malejąco, potem różnicy bramek
-    const sortedTeams = [...teamsCopy].sort((a, b) => {
-      if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
-      const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
-      const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
-      return bDiff - aDiff;
-    });
+    // Dla pierwszej rundy - losowe parowanie
+    let sortedTeams;
+    if (roundNumber === 1) {
+      // Losowe wymieszanie drużyn dla pierwszej rundy
+      sortedTeams = [...teamsCopy].sort(() => Math.random() - 0.5);
+    } else {
+      // W kolejnych rundach sortuj wg punktów malejąco, potem różnicy bramek
+      sortedTeams = [...teamsCopy].sort((a, b) => {
+        if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
+        const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
+        const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
+        return bDiff - aDiff;
+      });
+    }
 
     const pairings = [];
     const used = new Set();
@@ -484,13 +491,13 @@ export default function GroupTournament() {
       if (used.has(teamA.id)) continue;
 
       let paired = false;
-      // Szukaj najbliższego przeciwnika, którego jeszcze nie spotkał
-      for (let j = i + 1; j < sortedTeams.length; j++) {
-        const teamB = sortedTeams[j];
-        if (used.has(teamB.id)) continue;
-
-        // Sprawdź czy już grali ze sobą
-        if (!teamA.swissOpponents.includes(teamB.id)) {
+      
+      // Dla pierwszej rundy - prosta losowość, paruj z pierwszym dostępnym
+      if (roundNumber === 1) {
+        for (let j = i + 1; j < sortedTeams.length; j++) {
+          const teamB = sortedTeams[j];
+          if (used.has(teamB.id)) continue;
+          
           pairings.push({
             id: `r${roundNumber}-${teamA.id}-${teamB.id}`,
             round: roundNumber,
@@ -504,6 +511,29 @@ export default function GroupTournament() {
           used.add(teamB.id);
           paired = true;
           break;
+        }
+      } else {
+        // Dla kolejnych rund - szukaj najbliższego przeciwnika, którego jeszcze nie spotkał
+        for (let j = i + 1; j < sortedTeams.length; j++) {
+          const teamB = sortedTeams[j];
+          if (used.has(teamB.id)) continue;
+
+          // Sprawdź czy już grali ze sobą
+          if (!teamA.swissOpponents.includes(teamB.id)) {
+            pairings.push({
+              id: `r${roundNumber}-${teamA.id}-${teamB.id}`,
+              round: roundNumber,
+              teamA: teamA.id,
+              teamB: teamB.id,
+              isBye: false,
+              scoreA: '',
+              scoreB: ''
+            });
+            used.add(teamA.id);
+            used.add(teamB.id);
+            paired = true;
+            break;
+          }
         }
       }
 
