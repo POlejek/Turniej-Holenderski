@@ -235,7 +235,9 @@ export default function TournamentGenerator() {
       return;
     }
     
-    setPlayerNames(lines);
+    // Automatyczne losowe pomieszanie zawodników
+    const shuffledLines = shuffle(lines);
+    setPlayerNames(shuffledLines);
     setShowPasteMode(false);
     setPasteInput('');
   };
@@ -891,7 +893,11 @@ export default function TournamentGenerator() {
                     </button>
                     {!returnStep && (
                       <button
-                        onClick={() => setStep(3)}
+                        onClick={() => {
+                          // Automatyczne losowe pomieszanie zawodników
+                          setPlayerNames(shuffle(playerNames));
+                          setStep(3);
+                        }}
                         className={`w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-base ${playerNames.some(name => name.trim() === '') ? 'opacity-50 cursor-not-allowed' : ''}`}
                         disabled={playerNames.some(name => name.trim() === '')}
                       >
