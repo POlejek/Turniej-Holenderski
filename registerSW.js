@@ -1,1 +1,0 @@
-if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/Turniej-Holenderski/sw.js', { scope: '/Turniej-Holenderski/' })})}
