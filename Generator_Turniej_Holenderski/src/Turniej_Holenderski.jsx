@@ -63,7 +63,9 @@ export default function TournamentGenerator() {
   const [pasteInput, setPasteInput] = useState('');
 
   // Edit tournament state
-  const [newPlayerName, setNewPlayerName] = useState('');
+  const [numPlayersToAdd, setNumPlayersToAdd] = useState(1);
+  const [numPlayersToAddInput, setNumPlayersToAddInput] = useState('1');
+  const [newPlayerNames, setNewPlayerNames] = useState(['']);
   const [additionalRoundsToAdd, setAdditionalRoundsToAdd] = useState(1);
   const [additionalRoundsInput, setAdditionalRoundsInput] = useState('1');
   const [editTournamentError, setEditTournamentError] = useState('');
@@ -263,11 +265,11 @@ export default function TournamentGenerator() {
     return newArray;
   };
 
-  const getSuggestedAdditionalRounds = () => {
+  const getSuggestedAdditionalRounds = (newPlayersCount = 1) => {
     if (!matches.length || numPlayers === 0) return 1;
     const totalSlots = matches.length * playersPerTeam * 2;
     const avgMatchesPerPlayer = totalSlots / numPlayers;
-    const newTotalPlayers = numPlayers + 1;
+    const newTotalPlayers = numPlayers + newPlayersCount;
     const playersPerRound = numFields * playersPerTeam * 2;
     if (playersPerRound >= newTotalPlayers) {
       return Math.max(1, Math.round(avgMatchesPerPlayer));
@@ -276,8 +278,9 @@ export default function TournamentGenerator() {
     return Math.max(1, Math.ceil(avgMatchesPerPlayer / Math.max(matchesPerPlayerPerRound, 0.01)));
   };
 
-  const generateAdditionalMatches = (newName, additionalRounds) => {
-    const allPlayerNames = [...playerNames, newName];
+  const generateAdditionalMatches = (newNamesArg, additionalRounds) => {
+    const namesArray = Array.isArray(newNamesArg) ? newNamesArg : [newNamesArg];
+    const allPlayerNames = [...playerNames, ...namesArray];
     const playersPerMatch = playersPerTeam * 2;
 
     // Build current match counts
@@ -407,13 +410,21 @@ export default function TournamentGenerator() {
   };
 
   const applyTournamentEdit = () => {
-    const trimmedName = newPlayerName.trim();
-    if (!trimmedName) {
-      setEditTournamentError('Podaj imię nowego zawodnika.');
+    const trimmedNames = newPlayerNames.map(n => n.trim()).filter(n => n !== '');
+    if (trimmedNames.length === 0) {
+      setEditTournamentError('Podaj imię co najmniej jednego nowego zawodnika.');
       return;
     }
-    if (playerNames.some(n => n.trim().toLowerCase() === trimmedName.toLowerCase())) {
-      setEditTournamentError('Zawodnik o tym imieniu już istnieje w turnieju.');
+    const duplicateInExisting = trimmedNames.find(n =>
+      playerNames.some(p => p.trim().toLowerCase() === n.toLowerCase())
+    );
+    if (duplicateInExisting) {
+      setEditTournamentError(`Zawodnik "${duplicateInExisting}" już istnieje w turnieju.`);
+      return;
+    }
+    const uniqueNew = new Set(trimmedNames.map(n => n.toLowerCase()));
+    if (uniqueNew.size !== trimmedNames.length) {
+      setEditTournamentError('Lista nowych zawodników zawiera duplikaty.');
       return;
     }
     if (additionalRoundsToAdd < 1) {
@@ -421,20 +432,22 @@ export default function TournamentGenerator() {
       return;
     }
 
-    const newMatches = generateAdditionalMatches(trimmedName, additionalRoundsToAdd);
+    const newMatches = generateAdditionalMatches(trimmedNames, additionalRoundsToAdd);
 
     const newResults = { ...results };
     newMatches.forEach(match => {
       newResults[match.id] = { score1: '', score2: '' };
     });
 
-    setPlayerNames(prev => [...prev, trimmedName]);
+    setPlayerNames(prev => [...prev, ...trimmedNames]);
     setMatches(prev => [...prev, ...newMatches]);
-    setNumPlayers(prev => prev + 1);
+    setNumPlayers(prev => prev + trimmedNames.length);
     setNumRounds(prev => prev + additionalRoundsToAdd);
     setResults(newResults);
     setFinalStandings([]);
-    setNewPlayerName('');
+    setNumPlayersToAdd(1);
+    setNumPlayersToAddInput('1');
+    setNewPlayerNames(['']);
     setAdditionalRoundsToAdd(1);
     setAdditionalRoundsInput('1');
     setEditTournamentError('');
@@ -1335,10 +1348,12 @@ export default function TournamentGenerator() {
                 </button>
                 <button
                   onClick={() => {
-                    const suggested = getSuggestedAdditionalRounds();
+                    setNumPlayersToAdd(1);
+                    setNumPlayersToAddInput('1');
+                    setNewPlayerNames(['']);
+                    const suggested = getSuggestedAdditionalRounds(1);
                     setAdditionalRoundsToAdd(suggested);
                     setAdditionalRoundsInput(String(suggested));
-                    setNewPlayerName('');
                     setEditTournamentError('');
                     setPreviewNewMatches([]);
                     setStep(7);
@@ -1448,35 +1463,73 @@ export default function TournamentGenerator() {
 
           {step === 7 && (
             <div className="space-y-4 sm:space-y-6">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-800">✏️ Edytuj turniej — dodaj zawodnika</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800">✏️ Edytuj turniej — dodaj zawodników</h2>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
                 <p><strong>Aktualny turniej:</strong> {numPlayers} zawodników, {numRounds} rund, {matches.length} meczy</p>
-                <p className="mt-1">Dodaj nowego zawodnika — system wygeneruje dla niego dodatkowe rundy, aby wyrównać liczbę meczów z pozostałymi.</p>
+                <p className="mt-1">Dodaj nowych zawodników — system wygeneruje dla nich dodatkowe rundy, aby wyrównać liczbę meczów z pozostałymi.</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Imię nowego zawodnika
+                  Ilu zawodników chcesz dodać?
                 </label>
                 <input
                   type="text"
-                  value={newPlayerName}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={numPlayersToAddInput}
                   onChange={e => {
-                    setNewPlayerName(e.target.value);
-                    setEditTournamentError('');
-                    setPreviewNewMatches([]);
+                    const val = e.target.value;
+                    setNumPlayersToAddInput(val);
+                    const parsed = parseInt(val);
+                    if (!isNaN(parsed) && parsed >= 1 && parsed <= 20) {
+                      setNumPlayersToAdd(parsed);
+                      setNewPlayerNames(prev => {
+                        const updated = [...prev];
+                        while (updated.length < parsed) updated.push('');
+                        return updated.slice(0, parsed);
+                      });
+                      const suggested = getSuggestedAdditionalRounds(parsed);
+                      setAdditionalRoundsToAdd(suggested);
+                      setAdditionalRoundsInput(String(suggested));
+                      setPreviewNewMatches([]);
+                      setEditTournamentError('');
+                    }
                   }}
-                  placeholder="Wpisz imię..."
-                  className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent ${editTournamentError && !newPlayerName.trim() ? 'border-red-500' : 'border-gray-300'}`}
+                  className="w-32 px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Imiona nowych zawodników
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {newPlayerNames.map((name, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={name}
+                      onChange={e => {
+                        const updated = [...newPlayerNames];
+                        updated[idx] = e.target.value;
+                        setNewPlayerNames(updated);
+                        setEditTournamentError('');
+                        setPreviewNewMatches([]);
+                      }}
+                      placeholder={`Zawodnik ${idx + 1}`}
+                      className={`px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent ${name.trim() === '' ? 'border-red-300' : 'border-gray-300'}`}
+                    />
+                  ))}
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Liczba dodatkowych rund
                   <span className="ml-2 text-xs text-orange-600 font-normal">
-                    (Sugerowane: {getSuggestedAdditionalRounds()} — aby nowy zawodnik zagrał podobną liczbę meczy)
+                    (Sugerowane: {getSuggestedAdditionalRounds(numPlayersToAdd)} — aby nowi zawodnicy zagrali podobną liczbę meczy)
                   </span>
                 </label>
                 <input
@@ -1501,11 +1554,12 @@ export default function TournamentGenerator() {
                 )}
               </div>
 
-              {newPlayerName.trim() && additionalRoundsToAdd >= 1 && (
+              {newPlayerNames.some(n => n.trim()) && additionalRoundsToAdd >= 1 && (
                 <button
                   onClick={() => {
-                    if (!newPlayerName.trim()) return;
-                    const preview = generateAdditionalMatches(newPlayerName.trim(), additionalRoundsToAdd);
+                    const trimmed = newPlayerNames.map(n => n.trim()).filter(n => n);
+                    if (!trimmed.length) return;
+                    const preview = generateAdditionalMatches(trimmed, additionalRoundsToAdd);
                     setPreviewNewMatches(preview);
                   }}
                   className="w-full bg-gray-100 text-gray-800 py-2 sm:py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm sm:text-base"
@@ -1537,12 +1591,16 @@ export default function TournamentGenerator() {
                       );
                     })}
                   </div>
-                  <div className="pt-2 border-t border-orange-200">
-                    <p className="text-xs text-orange-700">
-                      Liczba meczy nowego zawodnika w dodatkowych rundach:{' '}
-                      <strong>{previewNewMatches.filter(m => m.team1.includes(newPlayerName.trim()) || m.team2.includes(newPlayerName.trim())).length}</strong>
-                    </p>
-                  </div>
+                  {(() => {
+                    const trimmedNew = newPlayerNames.map(n => n.trim()).filter(n => n);
+                    return trimmedNew.map(name => (
+                      <div key={name} className="pt-1">
+                        <p className="text-xs text-orange-700">
+                          <strong>{name}</strong>: {previewNewMatches.filter(m => m.team1.includes(name) || m.team2.includes(name)).length} meczy w nowych rundach
+                        </p>
+                      </div>
+                    ));
+                  })()}
                 </div>
               )}
 
@@ -1553,7 +1611,9 @@ export default function TournamentGenerator() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => {
-                    setNewPlayerName('');
+                    setNewPlayerNames(['']);
+                    setNumPlayersToAdd(1);
+                    setNumPlayersToAddInput('1');
                     setEditTournamentError('');
                     setPreviewNewMatches([]);
                     setStep(4);
@@ -1564,10 +1624,10 @@ export default function TournamentGenerator() {
                 </button>
                 <button
                   onClick={applyTournamentEdit}
-                  disabled={!newPlayerName.trim() || additionalRoundsToAdd < 1}
+                  disabled={!newPlayerNames.some(n => n.trim()) || additionalRoundsToAdd < 1}
                   className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  ✅ Zatwierdź i dodaj zawodnika
+                  ✅ Zatwierdź i dodaj {newPlayerNames.filter(n => n.trim()).length > 1 ? `${newPlayerNames.filter(n => n.trim()).length} zawodników` : 'zawodnika'}
                 </button>
               </div>
             </div>
