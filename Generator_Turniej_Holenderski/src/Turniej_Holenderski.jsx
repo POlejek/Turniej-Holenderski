@@ -67,8 +67,12 @@ export default function TournamentGenerator() {
   const [numPlayersToAddInput, setNumPlayersToAddInput] = useState('1');
   const [newPlayerNames, setNewPlayerNames] = useState(['']);
   const [playersToRemove, setPlayersToRemove] = useState(new Set());
-  const [additionalRoundsToAdd, setAdditionalRoundsToAdd] = useState(0);
-  const [additionalRoundsInput, setAdditionalRoundsInput] = useState('0');
+  const [editNumFields, setEditNumFields] = useState(2);
+  const [editNumFieldsInput, setEditNumFieldsInput] = useState('2');
+  const [editPlayersPerTeam, setEditPlayersPerTeam] = useState(2);
+  const [editPlayersPerTeamInput, setEditPlayersPerTeamInput] = useState('2');
+  const [editTotalRounds, setEditTotalRounds] = useState(0);
+  const [editTotalRoundsInput, setEditTotalRoundsInput] = useState('0');
   const [editTournamentError, setEditTournamentError] = useState('');
 
   // Debounced persist: save to localStorage 500ms after last change
@@ -265,18 +269,16 @@ export default function TournamentGenerator() {
     return newArray;
   };
 
-  const getSuggestedAdditionalRounds = (netNewPlayers = 0) => {
-    if (!matches.length || numPlayers === 0) return 0;
-    if (netNewPlayers <= 0) return 0;
-    const totalSlots = matches.length * playersPerTeam * 2;
+  const getSuggestedTotalRounds = () => {
+    const trimmedNew = newPlayerNames.filter(n => n.trim() !== '');
+    const remainingCount = playerNames.filter(n => !playersToRemove.has(n)).length;
+    const totalNewPlayers = remainingCount + trimmedNew.length;
+    if (totalNewPlayers <= 0 || numPlayers === 0 || numRounds === 0) return Math.max(1, editTotalRounds);
+    const totalSlots = numRounds * numFields * playersPerTeam * 2;
     const avgMatchesPerPlayer = totalSlots / numPlayers;
-    const newTotalPlayers = numPlayers + netNewPlayers;
-    const playersPerRound = numFields * playersPerTeam * 2;
-    if (playersPerRound >= newTotalPlayers) {
-      return Math.max(0, Math.round(avgMatchesPerPlayer));
-    }
-    const matchesPerPlayerPerRound = playersPerRound / newTotalPlayers;
-    return Math.max(0, Math.ceil(avgMatchesPerPlayer / Math.max(matchesPerPlayerPerRound, 0.01)));
+    const newPlayersPerRound = (editNumFields || numFields) * (editPlayersPerTeam || playersPerTeam) * 2;
+    if (newPlayersPerRound <= 0) return Math.max(1, editTotalRounds);
+    return Math.max(1, Math.round(avgMatchesPerPlayer * totalNewPlayers / newPlayersPerRound));
   };
 
   const generateAdditionalMatches = (newNamesArg, additionalRounds) => {
@@ -286,9 +288,12 @@ export default function TournamentGenerator() {
 
   // Core scheduling engine: generates rounds starting at startRound,
   // building match-count / teammate history from historyMatches.
-  const generateMatchesCore = (allPlayerNames, numRoundsToGenerate, startRound, historyMatches) => {
-    const playersPerMatch = playersPerTeam * 2;
-    const playersPerRound = numFields * playersPerMatch;
+  // fieldsCount / teamSize override numFields / playersPerTeam when provided.
+  const generateMatchesCore = (allPlayerNames, numRoundsToGenerate, startRound, historyMatches, fieldsCount, teamSize) => {
+    const resolvedFields = (fieldsCount != null && fieldsCount >= 1) ? fieldsCount : numFields;
+    const resolvedTeamSize = (teamSize != null && teamSize >= 1) ? teamSize : playersPerTeam;
+    const playersPerMatch = resolvedTeamSize * 2;
+    const playersPerRound = resolvedFields * playersPerMatch;
 
     // Build current match counts from history
     const playerMatchCount = {};
@@ -300,7 +305,7 @@ export default function TournamentGenerator() {
     });
 
     // Desired total matches per player over new rounds (distributed fairly)
-    const totalNewSlots = numRoundsToGenerate * numFields * playersPerMatch;
+    const totalNewSlots = numRoundsToGenerate * resolvedFields * playersPerMatch;
     const baseNew = Math.floor(totalNewSlots / allPlayerNames.length);
     const extraNew = totalNewSlots % allPlayerNames.length;
     const desiredMatches = {};
@@ -345,7 +350,7 @@ export default function TournamentGenerator() {
 
       let needyPlayers = allPlayerNames.filter(p => playerMatchCount[p] < (desiredMatches[p] || 0));
       needyPlayers.sort(comparator);
-      if (needyPlayers.length < playersPerMatch * numFields) {
+      if (needyPlayers.length < playersPerMatch * resolvedFields) {
         needyPlayers = allPlayerNames.filter(p => !playersAssignedThisRound.has(p)).sort(comparator);
       }
       let selectedThisRound = needyPlayers.slice(0, playersPerRound);
@@ -372,14 +377,14 @@ export default function TournamentGenerator() {
           return poolLocal.splice(bestIdx, 1)[0];
         };
 
-        for (let field = 0; field < numFields; field++) {
+        for (let field = 0; field < resolvedFields; field++) {
           const team1 = [], team2 = [];
-          for (let i = 0; i < playersPerTeam; i++) {
+          for (let i = 0; i < resolvedTeamSize; i++) {
             if (pool.length === 0) { ok = false; break; }
             team1.push(pickForTeam(team1, pool));
           }
           if (!ok) break;
-          for (let i = 0; i < playersPerTeam; i++) {
+          for (let i = 0; i < resolvedTeamSize; i++) {
             if (pool.length === 0) { ok = false; break; }
             team2.push(pickForTeam(team2, pool));
           }
@@ -389,7 +394,7 @@ export default function TournamentGenerator() {
           tentativeFields.push({ team1, team2 });
         }
 
-        if (ok && tentativeFields.length === numFields) {
+        if (ok && tentativeFields.length === resolvedFields) {
           tentativeFields.forEach((f, idx) => {
             const fieldNum = idx + 1;
             [...f.team1, ...f.team2].forEach(p => {
@@ -409,10 +414,10 @@ export default function TournamentGenerator() {
 
       if (!success) {
         let pool = [...allPlayerNames].sort(comparator).slice(0, playersPerRound);
-        for (let field = 0; field < numFields; field++) {
+        for (let field = 0; field < resolvedFields; field++) {
           if (pool.length < playersPerMatch) break;
-          const team1 = pool.splice(0, playersPerTeam);
-          const team2 = pool.splice(0, playersPerTeam);
+          const team1 = pool.splice(0, resolvedTeamSize);
+          const team2 = pool.splice(0, resolvedTeamSize);
           [...team1, ...team2].forEach(p => {
             playerMatchCount[p] = (playerMatchCount[p] || 0) + 1;
             lastPlayedRound[p] = round;
@@ -429,10 +434,6 @@ export default function TournamentGenerator() {
 
   const validateEditInputs = () => {
     const trimmedNames = newPlayerNames.map(n => n.trim()).filter(n => n !== '');
-    if (trimmedNames.length === 0 && playersToRemove.size === 0) {
-      setEditTournamentError('Dodaj lub usuń co najmniej jednego zawodnika.');
-      return null;
-    }
     const duplicateInExisting = trimmedNames.find(n =>
       playerNames.some(p => !playersToRemove.has(p) && p.trim().toLowerCase() === n.toLowerCase())
     );
@@ -445,10 +446,20 @@ export default function TournamentGenerator() {
       setEditTournamentError('Lista nowych zawodników zawiera duplikaty.');
       return null;
     }
+    const minRequired = (editPlayersPerTeam >= 1 ? editPlayersPerTeam : playersPerTeam) * 2;
     const remaining = playerNames.filter(n => !playersToRemove.has(n));
     const finalCount = remaining.length + trimmedNames.length;
-    if (finalCount < playersPerTeam * 2) {
-      setEditTournamentError(`Za mało zawodników (minimum ${playersPerTeam * 2} dla ${playersPerTeam}v${playersPerTeam}).`);
+    if (finalCount < minRequired) {
+      const ts = editPlayersPerTeam >= 1 ? editPlayersPerTeam : playersPerTeam;
+      setEditTournamentError(`Za mało zawodników (minimum ${minRequired} dla ${ts}v${ts}).`);
+      return null;
+    }
+    if (editTotalRounds < 1) {
+      setEditTournamentError('Liczba rund musi wynosić co najmniej 1.');
+      return null;
+    }
+    if (editNumFields < 1) {
+      setEditTournamentError('Liczba boisk musi wynosić co najmniej 1.');
       return null;
     }
     return trimmedNames;
@@ -459,9 +470,23 @@ export default function TournamentGenerator() {
     setNumPlayersToAddInput('1');
     setNewPlayerNames(['']);
     setPlayersToRemove(new Set());
-    setAdditionalRoundsToAdd(0);
-    setAdditionalRoundsInput('0');
     setEditTournamentError('');
+  };
+
+  const openEditTournament = (fromStep) => {
+    setNumPlayersToAdd(1);
+    setNumPlayersToAddInput('1');
+    setNewPlayerNames(['']);
+    setPlayersToRemove(new Set());
+    setEditNumFields(numFields);
+    setEditNumFieldsInput(String(numFields));
+    setEditPlayersPerTeam(playersPerTeam);
+    setEditPlayersPerTeamInput(String(playersPerTeam));
+    setEditTotalRounds(numRounds);
+    setEditTotalRoundsInput(String(numRounds));
+    setEditTournamentError('');
+    setReturnStep(fromStep);
+    setStep(7);
   };
 
   const getLastFullyPlayedRound = () => {
@@ -482,13 +507,15 @@ export default function TournamentGenerator() {
     const trimmedNames = validateEditInputs();
     if (!trimmedNames) return;
     const allNames = [...playerNames.filter(n => !playersToRemove.has(n)), ...trimmedNames];
-    const totalRounds = numRounds + additionalRoundsToAdd;
-    const newMatches = generateMatchesCore(allNames, totalRounds, 1, []);
+    const totalRounds = Math.max(1, editTotalRounds);
+    const newMatches = generateMatchesCore(allNames, totalRounds, 1, [], editNumFields, editPlayersPerTeam);
     const newResults = {};
     newMatches.forEach(m => { newResults[m.id] = { score1: '', score2: '' }; });
     setPlayerNames(allNames);
     setNumPlayers(allNames.length);
     setNumRounds(totalRounds);
+    setNumFields(editNumFields);
+    setPlayersPerTeam(editPlayersPerTeam);
     setMatches(newMatches);
     setResults(newResults);
     setFinalStandings([]);
@@ -496,7 +523,7 @@ export default function TournamentGenerator() {
     setStep(4);
   };
 
-  // Opcja 2: Zachowaj rozegrane mecze, wylosuj nierozegrane od nowa + dodatkowe rundy
+  // Opcja 2: Zachowaj rozegrane mecze, wylosuj nierozegrane od nowa
   const applyOption2KeepPlayed = () => {
     const trimmedNames = validateEditInputs();
     if (!trimmedNames) return;
@@ -504,11 +531,12 @@ export default function TournamentGenerator() {
 
     const lastFullyPlayedRound = getLastFullyPlayedRound();
     const playedMatches = matches.filter(m => m.round <= lastFullyPlayedRound);
-    const roundsToGenerate = (numRounds - lastFullyPlayedRound) + additionalRoundsToAdd;
+    const totalRounds = Math.max(lastFullyPlayedRound + 1, editTotalRounds);
+    const roundsToGenerate = totalRounds - lastFullyPlayedRound;
     const startRound = lastFullyPlayedRound + 1;
 
     const newMatches = roundsToGenerate > 0
-      ? generateMatchesCore(allNames, roundsToGenerate, startRound, playedMatches)
+      ? generateMatchesCore(allNames, roundsToGenerate, startRound, playedMatches, editNumFields, editPlayersPerTeam)
       : [];
 
     const newResults = {};
@@ -518,6 +546,8 @@ export default function TournamentGenerator() {
     setPlayerNames(allNames);
     setNumPlayers(allNames.length);
     setNumRounds(lastFullyPlayedRound + Math.max(roundsToGenerate, 0));
+    setNumFields(editNumFields);
+    setPlayersPerTeam(editPlayersPerTeam);
     setMatches([...playedMatches, ...newMatches]);
     setResults(newResults);
     setFinalStandings([]);
@@ -734,6 +764,7 @@ export default function TournamentGenerator() {
       }
 
       match.team1.forEach(player => {
+        if (!standings[player]) return;
         standings[player].matches++;
         standings[player].goalsFor += score1;
         standings[player].goalsAgainst += score2;
@@ -753,6 +784,7 @@ export default function TournamentGenerator() {
       });
 
       match.team2.forEach(player => {
+        if (!standings[player]) return;
         standings[player].matches++;
         standings[player].goalsFor += score2;
         standings[player].goalsAgainst += score1;
@@ -1417,14 +1449,10 @@ export default function TournamentGenerator() {
                   Edytuj imiona zawodników
                 </button>
                 <button
-                  onClick={() => {
-                    resetEditState();
-                    setReturnStep(4);
-                    setStep(7);
-                  }}
+                  onClick={() => openEditTournament(4)}
                   className="w-full bg-orange-100 text-orange-700 py-2 sm:py-3 rounded-lg hover:bg-orange-200 transition-colors font-medium text-sm sm:text-base flex items-center justify-center gap-2"
                 >
-                  ✏️ Edytuj skład turnieju
+                  ✏️ Edytuj turniej
                 </button>
               </div>
             </div>
@@ -1509,30 +1537,88 @@ export default function TournamentGenerator() {
                 Edytuj imiona zawodników
               </button>
               <button
-                onClick={() => {
-                  resetEditState();
-                  setReturnStep(5);
-                  setStep(7);
-                }}
+                onClick={() => openEditTournament(5)}
                 className="w-full bg-orange-100 text-orange-700 py-2 sm:py-3 rounded-lg hover:bg-orange-200 transition-colors font-medium text-sm sm:text-base flex items-center justify-center gap-2"
               >
-                ✏️ Edytuj skład turnieju
+                ✏️ Edytuj turniej
               </button>
             </div>
           )}
 
           {step === 7 && (
             <div className="space-y-4 sm:space-y-6">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-800">✏️ Edytuj skład turnieju</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800">✏️ Edytuj turniej</h2>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-                <p><strong>Aktualny turniej:</strong> {numPlayers} zawodników, {numRounds} rund, {matches.length} meczy</p>
+                <p><strong>Aktualny turniej:</strong> {numPlayers} zawodników · {numRounds} rund · {numFields} {numFields === 1 ? 'boisko' : numFields < 5 ? 'boiska' : 'boisk'} · {playersPerTeam}v{playersPerTeam}</p>
+              </div>
+
+              {/* Parametry turnieju */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Parametry turnieju</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Liczba rund</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={editTotalRoundsInput}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEditTotalRoundsInput(val);
+                        const parsed = parseInt(val);
+                        if (!isNaN(parsed) && parsed >= 1) setEditTotalRounds(parsed);
+                        setEditTournamentError('');
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Teraz: {numRounds}</p>
+                    <p className="text-xs text-orange-500 mt-0.5">Sug.: {getSuggestedTotalRounds()}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Liczba boisk</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={editNumFieldsInput}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEditNumFieldsInput(val);
+                        const parsed = parseInt(val);
+                        if (!isNaN(parsed) && parsed >= 1) setEditNumFields(parsed);
+                        setEditTournamentError('');
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Teraz: {numFields}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Na drużynę</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={editPlayersPerTeamInput}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEditPlayersPerTeamInput(val);
+                        const parsed = parseInt(val);
+                        if (!isNaN(parsed) && parsed >= 1) setEditPlayersPerTeam(parsed);
+                        setEditTournamentError('');
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Teraz: {playersPerTeam}v{playersPerTeam}</p>
+                  </div>
+                </div>
               </div>
 
               {/* Usuń zawodników */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-1">Usuń zawodników (opcjonalnie)</h3>
-                <p className="text-xs text-gray-500 mb-3">Kliknij, aby zaznaczyć do usunięcia. Rozegrane mecze zachowają wyniki — nierozegrane rundy zostaną wygenerowane od nowa.</p>
+                <p className="text-xs text-gray-500 mb-3">Kliknij zawodnika, aby zaznaczyć do usunięcia. Rozegrane mecze zachowają wyniki.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {playerNames.map((name) => {
                     const matchCount = matches.filter(m => m.team1.includes(name) || m.team2.includes(name)).length;
@@ -1566,9 +1652,7 @@ export default function TournamentGenerator() {
               {/* Dodaj zawodników */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-1">Dodaj zawodników (opcjonalnie)</h3>
-                <label className="block text-sm text-gray-600 mb-2">
-                  Ilu zawodników chcesz dodać?
-                </label>
+                <label className="block text-sm text-gray-600 mb-2">Ilu zawodników chcesz dodać?</label>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -1585,10 +1669,6 @@ export default function TournamentGenerator() {
                         while (updated.length < parsed) updated.push('');
                         return updated.slice(0, parsed);
                       });
-                      const netNew = parsed - playersToRemove.size;
-                      const suggested = getSuggestedAdditionalRounds(netNew);
-                      setAdditionalRoundsToAdd(suggested);
-                      setAdditionalRoundsInput(String(suggested));
                       setEditTournamentError('');
                     }
                   }}
@@ -1613,32 +1693,6 @@ export default function TournamentGenerator() {
                 </div>
               </div>
 
-              {/* Dodatkowe rundy */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Liczba dodatkowych rund
-                  <span className="ml-2 text-xs text-orange-600 font-normal">
-                    (Sugerowane: {getSuggestedAdditionalRounds(numPlayersToAdd - playersToRemove.size)} — dla wyrównania liczby meczy)
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={additionalRoundsInput}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setAdditionalRoundsInput(val);
-                    const parsed = parseInt(val);
-                    if (!isNaN(parsed) && parsed >= 0) {
-                      setAdditionalRoundsToAdd(parsed);
-                    }
-                    setEditTournamentError('');
-                  }}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                />
-              </div>
-
               {editTournamentError && (
                 <p className="text-red-600 text-sm font-medium">{editTournamentError}</p>
               )}
@@ -1648,20 +1702,18 @@ export default function TournamentGenerator() {
 
                 <button
                   onClick={applyOption2KeepPlayed}
-                  disabled={newPlayerNames.every(n => !n.trim()) && playersToRemove.size === 0}
-                  className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                  className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium text-sm sm:text-base"
                 >
                   🎲 Wylosuj nierozegrane mecze
-                  <span className="block text-xs font-normal opacity-90 mt-0.5">Zachowuje wpisane wyniki, losuje od nowa nierozegrane rundy + dodatkowe</span>
+                  <span className="block text-xs font-normal opacity-90 mt-0.5">Zachowuje wpisane wyniki, losuje od nowa nierozegrane rundy z nowymi parametrami</span>
                 </button>
 
                 <button
                   onClick={applyOption1Fresh}
-                  disabled={newPlayerNames.every(n => !n.trim()) && playersToRemove.size === 0}
-                  className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                  className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm sm:text-base"
                 >
                   🔄 Turniej od nowa
-                  <span className="block text-xs font-normal opacity-90 mt-0.5">Usuwa wszystkie wyniki i generuje cały harmonogram od początku (zawodnicy zostają)</span>
+                  <span className="block text-xs font-normal opacity-90 mt-0.5">Usuwa wszystkie wyniki i generuje cały harmonogram od początku</span>
                 </button>
               </div>
 
