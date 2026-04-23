@@ -269,16 +269,34 @@ export default function TournamentGenerator() {
     return newArray;
   };
 
-  const getSuggestedTotalRounds = () => {
+  const getEditedPlayerCount = () => {
     const trimmedNew = newPlayerNames.filter(n => n.trim() !== '');
     const remainingCount = playerNames.filter(n => !playersToRemove.has(n)).length;
-    const totalNewPlayers = remainingCount + trimmedNew.length;
+    return remainingCount + trimmedNew.length;
+  };
+
+  // Suggestion for "Turniej od nowa": maintain same avg matches as full current tournament
+  const getSuggestedRoundsFresh = () => {
+    const totalNewPlayers = getEditedPlayerCount();
     if (totalNewPlayers <= 0 || numPlayers === 0 || numRounds === 0) return Math.max(1, editTotalRounds);
     const totalSlots = numRounds * numFields * playersPerTeam * 2;
     const avgMatchesPerPlayer = totalSlots / numPlayers;
     const newPlayersPerRound = (editNumFields || numFields) * (editPlayersPerTeam || playersPerTeam) * 2;
     if (newPlayersPerRound <= 0) return Math.max(1, editTotalRounds);
     return Math.max(1, Math.round(avgMatchesPerPlayer * totalNewPlayers / newPlayersPerRound));
+  };
+
+  // Suggestion for "Wylosuj nierozegrane": new rounds needed so everyone reaches same avg as played so far
+  const getSuggestedRoundsKeepPlayed = () => {
+    const totalNewPlayers = getEditedPlayerCount();
+    const lastPlayed = getLastFullyPlayedRound();
+    if (totalNewPlayers <= 0 || numPlayers === 0) return Math.max(lastPlayed + 1, editTotalRounds);
+    const playedSlots = lastPlayed * numFields * playersPerTeam * 2;
+    const playedAvgPerPlayer = playedSlots / numPlayers;
+    const newPlayersPerRound = (editNumFields || numFields) * (editPlayersPerTeam || playersPerTeam) * 2;
+    if (newPlayersPerRound <= 0) return Math.max(lastPlayed + 1, editTotalRounds);
+    const newRoundsNeeded = Math.ceil(playedAvgPerPlayer * totalNewPlayers / newPlayersPerRound);
+    return Math.max(lastPlayed + 1, lastPlayed + newRoundsNeeded);
   };
 
   const generateAdditionalMatches = (newNamesArg, additionalRounds) => {
@@ -1557,7 +1575,7 @@ export default function TournamentGenerator() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Parametry turnieju</h3>
                 <div className="grid grid-cols-3 gap-3">
-                  <div>
+                  <div className="col-span-3 sm:col-span-1">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Liczba rund</label>
                     <input
                       type="text"
@@ -1574,7 +1592,20 @@ export default function TournamentGenerator() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
                     />
                     <p className="text-xs text-gray-400 mt-1">Teraz: {numRounds}</p>
-                    <p className="text-xs text-orange-500 mt-0.5">Sug.: {getSuggestedTotalRounds()}</p>
+                    <button
+                      type="button"
+                      onClick={() => { const v = getSuggestedRoundsFresh(); setEditTotalRounds(v); setEditTotalRoundsInput(String(v)); }}
+                      className="text-xs text-orange-600 hover:text-orange-800 mt-0.5 text-left w-full"
+                    >
+                      🔄 Nowy turniej: {getSuggestedRoundsFresh()} rund
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { const v = getSuggestedRoundsKeepPlayed(); setEditTotalRounds(v); setEditTotalRoundsInput(String(v)); }}
+                      className="text-xs text-green-600 hover:text-green-800 mt-0.5 text-left w-full"
+                    >
+                      🎲 Nierozegrane: {getSuggestedRoundsKeepPlayed()} rund
+                    </button>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Liczba boisk</label>
