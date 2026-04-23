@@ -286,17 +286,10 @@ export default function TournamentGenerator() {
     return Math.max(1, Math.round(avgMatchesPerPlayer * totalNewPlayers / newPlayersPerRound));
   };
 
-  // Suggestion for "Wylosuj nierozegrane": new rounds needed so everyone reaches same avg as played so far
+  // Suggestion for "Wylosuj nierozegrane": same target as fresh, but at least lastPlayed+1
   const getSuggestedRoundsKeepPlayed = () => {
-    const totalNewPlayers = getEditedPlayerCount();
     const lastPlayed = getLastFullyPlayedRound();
-    if (totalNewPlayers <= 0 || numPlayers === 0) return Math.max(lastPlayed + 1, editTotalRounds);
-    const playedSlots = lastPlayed * numFields * playersPerTeam * 2;
-    const playedAvgPerPlayer = playedSlots / numPlayers;
-    const newPlayersPerRound = (editNumFields || numFields) * (editPlayersPerTeam || playersPerTeam) * 2;
-    if (newPlayersPerRound <= 0) return Math.max(lastPlayed + 1, editTotalRounds);
-    const newRoundsNeeded = Math.ceil(playedAvgPerPlayer * totalNewPlayers / newPlayersPerRound);
-    return Math.max(lastPlayed + 1, lastPlayed + newRoundsNeeded);
+    return Math.max(lastPlayed + 1, getSuggestedRoundsFresh());
   };
 
   const generateAdditionalMatches = (newNamesArg, additionalRounds) => {
