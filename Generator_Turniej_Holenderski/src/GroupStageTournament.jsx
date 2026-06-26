@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Download, Users, Award, ArrowRight, RotateCcw, Edit2, Trophy } from 'lucide-react';
 import { saveState } from './utils/storage';
 import { shuffle } from './utils/shuffle';
+import { useConfirm } from './components/ConfirmDialog';
 
 export default function GroupStageTournament() {
   const STORAGE_KEY = 'group_stage_tournament_v2';
@@ -39,6 +40,7 @@ export default function GroupStageTournament() {
   const [currentTier, setCurrentTier] = useState(1);
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [editingTeam, setEditingTeam] = useState(null);
+  const { confirm, notify, dialog: confirmDialog } = useConfirm();
 
   // Auto-save
   useEffect(() => {
@@ -136,12 +138,12 @@ export default function GroupStageTournament() {
     const tier2Total = totalTeams - tier1Total;
 
     if (tier2Total < 0) {
-      alert('Błąd: Więcej miejsc w I lidze niż drużyn!');
+      notify('Błąd: Więcej miejsc w I lidze niż drużyn!');
       return;
     }
 
     if (tier2Total > 0 && tier2Groups === 0) {
-      alert('Błąd: Ustaw liczbę grup II ligi (zostało ' + tier2Total + ' drużyn)');
+      notify('Błąd: Ustaw liczbę grup II ligi (zostało ' + tier2Total + ' drużyn)');
       return;
     }
 
@@ -163,7 +165,7 @@ export default function GroupStageTournament() {
       .filter(name => name.length > 0);
 
     if (names.length < totalTeams) {
-      alert(`Potrzebujesz ${totalTeams} nazw drużyn! Masz tylko ${names.length}.`);
+      notify(`Potrzebujesz ${totalTeams} nazw drużyn! Masz tylko ${names.length}.`);
       return;
     }
 
@@ -281,7 +283,7 @@ export default function GroupStageTournament() {
 
     const result = results[matchId];
     if (result.scoreA === '' || result.scoreB === '') {
-      alert('Wprowadź oba wyniki!');
+      notify('Wprowadź oba wyniki!');
       return;
     }
 
@@ -526,11 +528,16 @@ export default function GroupStageTournament() {
     return ranking;
   };
 
-  const resetTournament = () => {
-    if (window.confirm('Czy na pewno chcesz zresetować turniej?')) {
-      localStorage.removeItem(STORAGE_KEY);
-      window.location.reload();
-    }
+  const resetTournament = async () => {
+    const ok = await confirm({
+      title: 'Zresetować turniej?',
+      message: 'Wszystkie dane zostaną usunięte. Tej operacji nie można cofnąć.',
+      confirmLabel: 'Tak, resetuj',
+      danger: true,
+    });
+    if (!ok) return;
+    localStorage.removeItem(STORAGE_KEY);
+    window.location.reload();
   };
 
   const saveTeamName = () => {
@@ -727,6 +734,7 @@ export default function GroupStageTournament() {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100 p-4">
+        {confirmDialog}
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-2xl shadow-2xl p-8">
             <h1 className="text-4xl font-bold text-gray-800 mb-2 text-center">
@@ -897,6 +905,7 @@ export default function GroupStageTournament() {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        {confirmDialog}
         <div className="max-w-4xl mx-auto">
           <div className="bg-white rounded-2xl shadow-2xl p-8">
             <h1 className="text-4xl font-bold text-gray-800 mb-2 text-center">
@@ -959,6 +968,7 @@ export default function GroupStageTournament() {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-2 sm:p-4">
+        {confirmDialog}
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-6 mb-4 sm:mb-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
@@ -1092,6 +1102,7 @@ export default function GroupStageTournament() {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-100 p-2 sm:p-4">
+        {confirmDialog}
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-6 mb-4 sm:mb-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
