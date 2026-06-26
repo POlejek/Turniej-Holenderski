@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Trophy, Download } from 'lucide-react';
 import { loadState, saveState } from './utils/storage';
+import { useConfirm } from './components/ConfirmDialog';
 
 // Local storage key for persistence
 const STORAGE_KEY = 'team_tournament_state_v1';
@@ -15,6 +16,7 @@ export default function TournamentScheduler() {
   const [expandedTeams, setExpandedTeams] = useState({});
   const [results, setResults] = useState({});
   const [showStandings, setShowStandings] = useState(false);
+  const { confirm, notify, dialog: confirmDialog } = useConfirm();
 
   // Debounced persist: save to localStorage 500ms after last change
   const saveTimeoutRef = useRef(null);
@@ -111,9 +113,9 @@ export default function TournamentScheduler() {
     setExpandedTeams(prev => ({ ...prev, [newId]: true }));
   };
 
-  const removeTeam = (teamId) => {
+  const removeTeam = async (teamId) => {
     if (teams.length <= 2) {
-      alert('Turniej musi mieć co najmniej 2 drużyny!');
+      notify('Turniej musi mieć co najmniej 2 drużyny!');
       return;
     }
     
@@ -131,27 +133,27 @@ export default function TournamentScheduler() {
       confirmMessage = 'Ta drużyna ma rozegrane mecze. Po usunięciu, drużyna zostanie zastąpiona PAUZĄ. Czy na pewno chcesz kontynuować?';
     }
     
-    if (window.confirm(confirmMessage)) {
-      if (hasResults && schedule.length > 0) {
-        // Replace team with PAUSE instead of removing
-        const pauseTeam = {
-          id: teamId,
-          name: 'PAUZA',
-          players: [],
-          isPause: true
-        };
-        setTeams(teams.map(t => t.id === teamId ? pauseTeam : t));
-      } else {
-        // Remove team and regenerate schedule
-        const updatedTeams = teams.filter(t => t.id !== teamId);
-        setTeams(updatedTeams);
-        setNumTeams(String(updatedTeams.length));
-        
-        if (schedule.length > 0) {
-          setTimeout(() => {
-            generateBergerSchedule(true);
-          }, 100);
-        }
+    if (!(await confirm({ title: 'Usunąć drużynę?', message: confirmMessage, danger: true, confirmLabel: 'Usuń' }))) return;
+
+    if (hasResults && schedule.length > 0) {
+      // Replace team with PAUSE instead of removing
+      const pauseTeam = {
+        id: teamId,
+        name: 'PAUZA',
+        players: [],
+        isPause: true
+      };
+      setTeams(teams.map(t => t.id === teamId ? pauseTeam : t));
+    } else {
+      // Remove team and regenerate schedule
+      const updatedTeams = teams.filter(t => t.id !== teamId);
+      setTeams(updatedTeams);
+      setNumTeams(String(updatedTeams.length));
+
+      if (schedule.length > 0) {
+        setTimeout(() => {
+          generateBergerSchedule(true);
+        }, 100);
       }
     }
   };
@@ -539,19 +541,24 @@ export default function TournamentScheduler() {
     URL.revokeObjectURL(url);
   };
 
-  const resetTournament = () => {
-    if (window.confirm('Czy na pewno chcesz zresetować turniej? Wszystkie dane zostaną usunięte.')) {
-      setStep(1);
-      setNumTeams('4');
-      setNumFields('1');
-      setMatchesPerPair('1');
-      setTeams([]);
-      setSchedule([]);
-      setExpandedTeams({});
-      setResults({});
-      setShowStandings(false);
-      localStorage.removeItem(STORAGE_KEY);
-    }
+  const resetTournament = async () => {
+    const ok = await confirm({
+      title: 'Zresetować turniej?',
+      message: 'Wszystkie dane zostaną usunięte. Tej operacji nie można cofnąć.',
+      confirmLabel: 'Tak, resetuj',
+      danger: true,
+    });
+    if (!ok) return;
+    setStep(1);
+    setNumTeams('4');
+    setNumFields('1');
+    setMatchesPerPair('1');
+    setTeams([]);
+    setSchedule([]);
+    setExpandedTeams({});
+    setResults({});
+    setShowStandings(false);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const editTeams = () => {
@@ -680,12 +687,13 @@ export default function TournamentScheduler() {
 
       setSchedule(scheduledMatches);
       setResults(newResults);
-      alert(`Harmonogram został zaktualizowany z ${oldNumFields} na ${newFields} boisk. Wyniki zostały zachowane.`);
+      notify(`Harmonogram został zaktualizowany z ${oldNumFields} na ${newFields} boisk. Wyniki zostały zachowane.`);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 sm:p-4 md:p-8">
+      {confirmDialog}
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-lg sm:rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8">
           <div className="flex justify-between items-start mb-4 sm:mb-6">

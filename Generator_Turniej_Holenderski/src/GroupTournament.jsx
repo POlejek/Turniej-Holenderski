@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2, Trophy, Download, ArrowLeft, ArrowRight, Users, RefreshCw } from 'lucide-react';
 import { loadState, saveState } from './utils/storage';
 import { shuffle } from './utils/shuffle';
+import { useConfirm } from './components/ConfirmDialog';
 
 const STORAGE_KEY = 'swiss_tournament_state_v1';
 
@@ -30,6 +31,7 @@ export default function GroupTournament() {
   const [playoffBracket, setPlayoffBracket] = useState([]);
   const [playoffResults, setPlayoffResults] = useState({});
   const [finalRanking, setFinalRanking] = useState([]);
+  const { confirm, notify, dialog: confirmDialog } = useConfirm();
   
   // UI
   const [showStandings, setShowStandings] = useState(false);
@@ -169,9 +171,14 @@ export default function GroupTournament() {
   };
 
   // Wycofanie drużyny z turnieju
-  const withdrawTeam = (teamId) => {
+  const withdrawTeam = async (teamId) => {
     const team = teams.find(t => t.id === teamId);
-    if (!window.confirm(`Czy na pewno chcesz wycofać drużynę "${team.name}" z turnieju? Wszystkie ich mecze zostaną uznane za walkowery dla przeciwników.`)) {
+    if (!(await confirm({
+      title: 'Wycofać drużynę?',
+      message: `Czy na pewno chcesz wycofać drużynę "${team?.name}" z turnieju? Wszystkie ich mecze zostaną uznane za walkowery dla przeciwników.`,
+      confirmLabel: 'Wycofaj',
+      danger: true,
+    }))) {
       return;
     }
 
@@ -284,11 +291,15 @@ export default function GroupTournament() {
   };
 
   // Przywrócenie wycofanej drużyny
-  const restoreTeam = (teamId) => {
+  const restoreTeam = async (teamId) => {
     const team = teams.find(t => t.id === teamId);
     if (!team || !team.withdrawn) return;
     
-    if (!window.confirm(`Czy na pewno chcesz przywrócić drużynę? Walkowery przyznane przeciwnikom zostaną anulowane.`)) {
+    if (!(await confirm({
+      title: 'Przywrócić drużynę?',
+      message: 'Czy na pewno chcesz przywrócić drużynę? Walkowery przyznane przeciwnikom zostaną anulowane.',
+      confirmLabel: 'Przywróć',
+    }))) {
       return;
     }
 
@@ -592,7 +603,7 @@ export default function GroupTournament() {
     });
 
     if (!allCompleted) {
-      alert('Uzupełnij wyniki wszystkich meczów przed przejściem dalej!');
+      notify('Uzupełnij wyniki wszystkich meczów przed przejściem dalej!');
       return;
     }
 
@@ -770,7 +781,7 @@ export default function GroupTournament() {
       // Ostatnia runda - tylko zaktualizuj
       setTeams(updatedTeams);
       setSwissResults(updatedResults);
-      alert('Faza Swiss zakończona! Teraz zostanie wygenerowana faza playoff.');
+      notify('Faza Swiss zakończona! Teraz zostanie wygenerowana faza playoff.');
     }
   };
 
@@ -899,7 +910,7 @@ export default function GroupTournament() {
     // Sprawdź czy liczba playoff teams jest potęgą 2
     const validSizes = [2, 4, 8, 16];
     if (!validSizes.includes(topN)) {
-      alert(`Liczba drużyn w playoff (${topN}) musi być potęgą 2 (2, 4, 8, 16)`);
+      notify(`Liczba drużyn w playoff (${topN}) musi być potęgą 2 (2, 4, 8, 16)`);
       return;
     }
     
@@ -979,7 +990,7 @@ export default function GroupTournament() {
   const confirmPlayoffMatch = (matchId) => {
     const result = playoffResults[matchId];
     if (result.scoreA === '' || result.scoreB === '') {
-      alert('Wprowadź wyniki dla obu drużyn');
+      notify('Wprowadź wyniki dla obu drużyn');
       return;
     }
     
@@ -987,7 +998,7 @@ export default function GroupTournament() {
     const scoreB = parseInt(result.scoreB) || 0;
     
     if (scoreA === scoreB) {
-      alert('W fazie playoff nie może być remisu. Wprowadź rozstrzygający wynik.');
+      notify('W fazie playoff nie może być remisu. Wprowadź rozstrzygający wynik.');
       return;
     }
     
@@ -1164,8 +1175,13 @@ export default function GroupTournament() {
   };
 
   // Resetowanie turnieju
-  const resetTournament = () => {
-    if (!window.confirm('Czy na pewno chcesz zresetować turniej? Wszystkie dane zostaną utracone.')) {
+  const resetTournament = async () => {
+    if (!(await confirm({
+      title: 'Zresetować turniej?',
+      message: 'Wszystkie dane zostaną utracone. Tej operacji nie można cofnąć.',
+      confirmLabel: 'Tak, resetuj',
+      danger: true,
+    }))) {
       return;
     }
     
@@ -1865,6 +1881,7 @@ export default function GroupTournament() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-2 sm:p-4 md:p-8">
+      {confirmDialog}
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-lg sm:rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-purple-900 mb-1 sm:mb-2 text-center">
