@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { loadState, saveState } from './utils/storage';
 import { shuffle } from './utils/shuffle';
+import { exportStateToFile, readStateFromFile } from './utils/transfer';
+import { useConfirm } from './components/ConfirmDialog';
 
 // Local storage key for persistence
 const STORAGE_KEY = 'tournament_state_v1';
@@ -61,51 +63,59 @@ export default function TournamentGenerator() {
   const saveTimeoutRef = useRef(null);
   // Status autozapisu pokazywany użytkownikowi ('saving' | 'saved')
   const [saveStatus, setSaveStatus] = useState('saved');
+  // Ukryty input pliku do importu stanu turnieju
+  const importInputRef = useRef(null);
+  // Modal zastępujący natywne alert/confirm
+  const { confirm, notify, dialog: confirmDialog } = useConfirm();
+
+  // Buduje obiekt stanu do persystencji/eksportu
+  const buildState = () => ({
+    step,
+    numPlayers,
+    numFields,
+    playersPerTeam,
+    numRounds,
+    playerNames,
+    matches,
+    results,
+    finalStandings,
+    pointsWin,
+    pointsDraw,
+    pointsLoss,
+    pointsPerGoal,
+    returnStep
+  });
+
+  // Wczytuje stan z obiektu (z localStorage lub z importowanego pliku)
+  const applyState = (saved) => {
+    if (!saved) return;
+    if (typeof saved.step === 'number') setStep(saved.step);
+    if (typeof saved.numPlayers === 'number') setNumPlayers(saved.numPlayers);
+    if (typeof saved.numFields === 'number') setNumFields(saved.numFields);
+    if (typeof saved.playersPerTeam === 'number') setPlayersPerTeam(saved.playersPerTeam);
+    if (typeof saved.numRounds === 'number') setNumRounds(saved.numRounds);
+    if (Array.isArray(saved.playerNames)) setPlayerNames(saved.playerNames);
+    if (Array.isArray(saved.matches)) setMatches(saved.matches);
+    if (saved.results && typeof saved.results === 'object') setResults(saved.results);
+    if (Array.isArray(saved.finalStandings)) setFinalStandings(saved.finalStandings);
+    if (typeof saved.pointsWin === 'number') setPointsWin(saved.pointsWin);
+    if (typeof saved.pointsDraw === 'number') setPointsDraw(saved.pointsDraw);
+    if (typeof saved.pointsLoss === 'number') setPointsLoss(saved.pointsLoss);
+    if (typeof saved.pointsPerGoal === 'number') setPointsPerGoal(saved.pointsPerGoal);
+    if (typeof saved.returnStep === 'number') setReturnStep(saved.returnStep);
+  };
 
   // Load persisted state on mount
   useEffect(() => {
-    const saved = loadState(STORAGE_KEY);
-    if (saved) {
-      if (typeof saved.step === 'number') setStep(saved.step);
-      if (typeof saved.numPlayers === 'number') setNumPlayers(saved.numPlayers);
-      if (typeof saved.numFields === 'number') setNumFields(saved.numFields);
-      if (typeof saved.playersPerTeam === 'number') setPlayersPerTeam(saved.playersPerTeam);
-      if (typeof saved.numRounds === 'number') setNumRounds(saved.numRounds);
-      if (Array.isArray(saved.playerNames)) setPlayerNames(saved.playerNames);
-      if (Array.isArray(saved.matches)) setMatches(saved.matches);
-      if (saved.results && typeof saved.results === 'object') setResults(saved.results);
-      if (Array.isArray(saved.finalStandings)) setFinalStandings(saved.finalStandings);
-      if (typeof saved.pointsWin === 'number') setPointsWin(saved.pointsWin);
-      if (typeof saved.pointsDraw === 'number') setPointsDraw(saved.pointsDraw);
-      if (typeof saved.pointsLoss === 'number') setPointsLoss(saved.pointsLoss);
-      if (typeof saved.pointsPerGoal === 'number') setPointsPerGoal(saved.pointsPerGoal);
-      if (typeof saved.returnStep === 'number') setReturnStep(saved.returnStep);
-    }
+    applyState(loadState(STORAGE_KEY));
   }, []);
 
-  
-  useEffect(() => {
-    const stateToSave = () => ({
-      step,
-      numPlayers,
-      numFields,
-      playersPerTeam,
-      numRounds,
-      playerNames,
-      matches,
-      results,
-      finalStandings,
-      pointsWin,
-      pointsDraw,
-      pointsLoss,
-      pointsPerGoal,
-      returnStep
-    });
 
+  useEffect(() => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveStatus('saving');
     saveTimeoutRef.current = setTimeout(() => {
-      saveState(STORAGE_KEY, stateToSave());
+      saveState(STORAGE_KEY, buildState());
       saveTimeoutRef.current = null;
       setSaveStatus('saved');
     }, 500);
@@ -115,6 +125,8 @@ export default function TournamentGenerator() {
         clearTimeout(saveTimeoutRef.current);
       }
     };
+  // buildState czyta wszystkie poniższe stany — zależymy od nich jawnie
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, numPlayers, numFields, playersPerTeam, numRounds, playerNames, matches, results, finalStandings, pointsWin, pointsDraw, pointsLoss, pointsPerGoal, returnStep]);
   // Synchronize input fields with state
   useEffect(() => { setNumPlayersInput(numPlayers === '' ? '' : String(numPlayers)); }, [numPlayers]);
@@ -233,7 +245,7 @@ export default function TournamentGenerator() {
     const lines = pasteInput.split('\n').map(line => line.trim()).filter(line => line !== '');
     
     if (lines.length !== numPlayers) {
-      alert(`Wklejono ${lines.length} imion, ale potrzeba ${numPlayers}. Popraw dane lub zmień liczbę zawodników.`);
+      notify(`Wklejono ${lines.length} imion, ale potrzeba ${numPlayers}. Popraw dane lub zmień liczbę zawodników.`);
       return;
     }
     
@@ -854,8 +866,34 @@ export default function TournamentGenerator() {
     URL.revokeObjectURL(url);
   };
 
-  const resetCache = () => {
-    if (!window.confirm('Użycie tego usunie wszystkie dane o obecnym turnieju. Czy jesteś tego pewny?')) return;
+  // Eksport całego stanu turnieju do pliku JSON (do wznowienia/udostępnienia)
+  const handleExportFile = () => {
+    exportStateToFile(`turniej-holenderski-${new Date().toISOString().split('T')[0]}.json`, buildState());
+  };
+
+  // Import stanu turnieju z pliku JSON
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // pozwól wczytać ten sam plik ponownie
+    if (!file) return;
+    try {
+      const imported = await readStateFromFile(file);
+      applyState(imported);
+      saveState(STORAGE_KEY, imported);
+    } catch (err) {
+      notify(err.message || 'Nie udało się wczytać pliku.', { title: 'Błąd importu', danger: true });
+    }
+  };
+
+  const resetCache = async () => {
+    const ok = await confirm({
+      title: 'Zresetować turniej?',
+      message: 'To usunie wszystkie dane o obecnym turnieju. Tej operacji nie można cofnąć.',
+      confirmLabel: 'Tak, resetuj',
+      cancelLabel: 'Anuluj',
+      danger: true,
+    });
+    if (!ok) return;
 
     // Anuluj zaplanowane zapisy
     if (saveTimeoutRef.current) {
@@ -897,6 +935,7 @@ export default function TournamentGenerator() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 sm:p-4 md:p-6">
+      {confirmDialog}
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 md:p-8 mb-6">
           <div className="mb-4 sm:mb-6 flex items-center justify-between">
@@ -909,6 +948,28 @@ export default function TournamentGenerator() {
               >
                 {saveStatus === 'saving' ? '⏳ Zapisywanie…' : '✓ Zapisano'}
               </span>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                onChange={handleImportFile}
+                className="hidden"
+                aria-hidden="true"
+              />
+              <button
+                onClick={handleExportFile}
+                title="Zapisz turniej do pliku (do wznowienia lub udostępnienia)"
+                className="bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+              >
+                ⬇️ Plik
+              </button>
+              <button
+                onClick={() => importInputRef.current?.click()}
+                title="Wczytaj turniej z pliku JSON"
+                className="bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+              >
+                ⬆️ Wczytaj
+              </button>
               <button
                 onClick={resetCache}
                 className="bg-red-50 text-red-700 py-2 px-3 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
@@ -973,7 +1034,7 @@ export default function TournamentGenerator() {
                     setInputError('');
                   }}
                   aria-invalid={numPlayersInvalid}
-                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numPlayersInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:border-transparent ${numPlayersInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {numPlayersInvalid && (
                   <div className="text-red-600 text-sm mt-1">Minimalna liczba zawodników to 4</div>
@@ -996,7 +1057,7 @@ export default function TournamentGenerator() {
                     setInputError('');
                   }}
                   aria-invalid={numFieldsInvalid}
-                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numFieldsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:border-transparent ${numFieldsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {numFieldsInvalid && (
                   <div className="text-red-600 text-sm mt-1">Minimalna liczba boisk to 1</div>
@@ -1019,7 +1080,7 @@ export default function TournamentGenerator() {
                     setInputError('');
                   }}
                   aria-invalid={playersPerTeamInvalid}
-                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${playersPerTeamInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:border-transparent ${playersPerTeamInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {playersPerTeamInvalid && (
                   <div className="text-red-600 text-sm mt-1">Minimalna liczba zawodników w drużynie to 1</div>
@@ -1045,7 +1106,7 @@ export default function TournamentGenerator() {
                     setInputError('');
                   }}
                   aria-invalid={numRoundsInvalid}
-                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base rounded-lg focus:ring-2 focus:border-transparent ${numRoundsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 text-base border rounded-lg focus:ring-2 focus:border-transparent ${numRoundsInvalid ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-500'}`}
                 />
                 {numRoundsInvalid && (
                   <div className="text-red-600 text-sm mt-1">Liczba rund musi być większa lub równa 1</div>
