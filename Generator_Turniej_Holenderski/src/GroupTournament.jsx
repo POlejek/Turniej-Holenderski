@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2, Trophy, Download, ArrowLeft, ArrowRight, Users, RefreshCw } from 'lucide-react';
 import { loadState, saveState } from './utils/storage';
+import { shuffle } from './utils/shuffle';
 
 const STORAGE_KEY = 'swiss_tournament_state_v1';
 
@@ -431,8 +432,8 @@ export default function GroupTournament() {
     // Dla pierwszej rundy - losowe parowanie
     let sortedTeams;
     if (roundNumber === 1) {
-      // Losowe wymieszanie drużyn dla pierwszej rundy
-      sortedTeams = [...teamsCopy].sort(() => Math.random() - 0.5);
+      // Losowe wymieszanie drużyn dla pierwszej rundy (bezstronny Fisher–Yates)
+      sortedTeams = shuffle(teamsCopy);
     } else {
       // W kolejnych rundach sortuj wg punktów malejąco, potem różnicy bramek
       sortedTeams = [...teamsCopy].sort((a, b) => {
@@ -450,7 +451,11 @@ export default function GroupTournament() {
     if (sortedTeams.length % 2 !== 0) {
       // Znajdź drużynę z najmniejszą liczbą bye, która jeszcze nie dostała
       const byeCandidates = sortedTeams.filter(t => !used.has(t.id));
-      byeCandidates.sort((a, b) => a.byeCount - b.byeCount);
+      // Bye dostaje najniżej notowana drużyna z najmniejszą liczbą dotychczasowych bye
+      byeCandidates.sort((a, b) => {
+        if ((a.byeCount || 0) !== (b.byeCount || 0)) return (a.byeCount || 0) - (b.byeCount || 0);
+        return (a.swissPoints || 0) - (b.swissPoints || 0);
+      });
       
       const byeTeam = byeCandidates[0];
       if (byeTeam) {
@@ -676,7 +681,11 @@ export default function GroupTournament() {
         // Obsługa bye
         if (sortedTeams.length % 2 !== 0) {
           const byeCandidates = sortedTeams.filter(t => !used.has(t.id));
-          byeCandidates.sort((a, b) => a.byeCount - b.byeCount);
+          // Bye dostaje najniżej notowana drużyna z najmniejszą liczbą dotychczasowych bye
+          byeCandidates.sort((a, b) => {
+            if ((a.byeCount || 0) !== (b.byeCount || 0)) return (a.byeCount || 0) - (b.byeCount || 0);
+            return (a.swissPoints || 0) - (b.swissPoints || 0);
+          });
           
           const byeTeam = byeCandidates[0];
           if (byeTeam) {
@@ -768,7 +777,20 @@ export default function GroupTournament() {
   // Obliczanie tabeli Swiss
   const calculateSwissStandings = () => {
     const activeTeams = [...teams].filter(t => !t.withdrawn);
-    
+
+    // Buchholz: suma punktów Swiss wszystkich napotkanych przeciwników.
+    // To standardowy tiebreak w systemie szwajcarskim — premiuje drużyny,
+    // które zdobyły swoje punkty z trudniejszymi rywalami.
+    const pointsById = {};
+    teams.forEach(t => { pointsById[t.id] = t.swissPoints || 0; });
+    const rankedTeams = activeTeams.map(t => ({
+      ...t,
+      buchholz: (t.swissOpponents || []).reduce(
+        (sum, oppId) => sum + (pointsById[oppId] || 0),
+        0
+      ),
+    }));
+
     // Funkcja pomocnicza do sprawdzenia bezpośrednich meczów
     const getHeadToHeadResult = (teamA, teamB) => {
       let teamAPoints = 0;
@@ -832,11 +854,14 @@ export default function GroupTournament() {
       };
     };
 
-    return activeTeams.sort((a, b) => {
+    return rankedTeams.sort((a, b) => {
       // 1. Punkty
       if (b.swissPoints !== a.swissPoints) return b.swissPoints - a.swissPoints;
-      
-      // 2. Bezpośredni mecz (jeśli się odbył)
+
+      // 2. Buchholz (siła napotkanych przeciwników)
+      if ((b.buchholz || 0) !== (a.buchholz || 0)) return (b.buchholz || 0) - (a.buchholz || 0);
+
+      // 3. Bezpośredni mecz (jeśli się odbył)
       const headToHead = getHeadToHeadResult(a, b);
       if (headToHead) {
         // Porównaj punkty z bezpośrednich meczów
@@ -853,12 +878,12 @@ export default function GroupTournament() {
         }
       }
       
-      // 3. Bilans bramek (ogólny)
+      // 4. Bilans bramek (ogólny)
       const aDiff = (a.goalsFor || 0) - (a.goalsAgainst || 0);
       const bDiff = (b.goalsFor || 0) - (b.goalsAgainst || 0);
       if (bDiff !== aDiff) return bDiff - aDiff;
-      
-      // 4. Bramki strzelone (ogólne)
+
+      // 5. Bramki strzelone (ogólne)
       return (b.goalsFor || 0) - (a.goalsFor || 0);
     });
   };
@@ -1508,6 +1533,7 @@ export default function GroupTournament() {
                     <th className="px-2 py-2 text-left">#</th>
                     <th className="px-2 py-2 text-left">Drużyna</th>
                     <th className="px-2 py-2 text-center">Pkt</th>
+                    <th className="px-2 py-2 text-center" title="Buchholz – suma punktów przeciwników (tiebreak)">Bch</th>
                     <th className="px-2 py-2 text-center">M</th>
                     <th className="px-2 py-2 text-center">W</th>
                     <th className="px-2 py-2 text-center">R</th>
@@ -1525,6 +1551,7 @@ export default function GroupTournament() {
                         {team.name}
                       </td>
                       <td className="px-2 py-2 text-center font-bold">{team.swissPoints || 0}</td>
+                      <td className="px-2 py-2 text-center text-gray-500">{team.buchholz || 0}</td>
                       <td className="px-2 py-2 text-center">{(team.wins || 0) + (team.draws || 0) + (team.losses || 0)}</td>
                       <td className="px-2 py-2 text-center">{team.wins || 0}</td>
                       <td className="px-2 py-2 text-center">{team.draws || 0}</td>

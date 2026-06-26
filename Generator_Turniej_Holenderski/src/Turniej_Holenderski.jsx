@@ -59,6 +59,8 @@ export default function TournamentGenerator() {
 
   // Debounced persist: save to localStorage 500ms after last change
   const saveTimeoutRef = useRef(null);
+  // Status autozapisu pokazywany użytkownikowi ('saving' | 'saved')
+  const [saveStatus, setSaveStatus] = useState('saved');
 
   // Load persisted state on mount
   useEffect(() => {
@@ -101,9 +103,11 @@ export default function TournamentGenerator() {
     });
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setSaveStatus('saving');
     saveTimeoutRef.current = setTimeout(() => {
       saveState(STORAGE_KEY, stateToSave());
       saveTimeoutRef.current = null;
+      setSaveStatus('saved');
     }, 500);
 
     return () => {
@@ -897,7 +901,14 @@ export default function TournamentGenerator() {
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 md:p-8 mb-6">
           <div className="mb-4 sm:mb-6 flex items-center justify-between">
             <Logo />
-            <div className="ml-4">
+            <div className="ml-4 flex items-center gap-3">
+              <span
+                className={`hidden sm:inline-flex items-center gap-1 text-xs font-medium transition-colors ${saveStatus === 'saving' ? 'text-gray-400' : 'text-green-600'}`}
+                title="Postęp zapisuje się automatycznie w tej przeglądarce"
+                aria-live="polite"
+              >
+                {saveStatus === 'saving' ? '⏳ Zapisywanie…' : '✓ Zapisano'}
+              </span>
               <button
                 onClick={resetCache}
                 className="bg-red-50 text-red-700 py-2 px-3 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
@@ -907,13 +918,50 @@ export default function TournamentGenerator() {
             </div>
           </div>
 
+          {step >= 1 && step <= 5 && (
+            <div className="mb-5 sm:mb-7">
+              <div className="flex items-center">
+                {['Konfiguracja', 'Zawodnicy', 'Podsumowanie', 'Mecze', 'Wyniki'].map((label, idx) => {
+                  const stepNum = idx + 1;
+                  const isDone = step > stepNum;
+                  const isCurrent = step === stepNum;
+                  return (
+                    <div key={label} className="flex items-center flex-1 last:flex-none">
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs sm:text-sm font-bold transition-colors ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white'
+                              : isDone
+                              ? 'bg-indigo-200 text-indigo-700'
+                              : 'bg-gray-200 text-gray-400'
+                          }`}
+                          aria-current={isCurrent ? 'step' : undefined}
+                        >
+                          {isDone ? '✓' : stepNum}
+                        </div>
+                        <span className={`mt-1 text-[10px] sm:text-xs text-center ${isCurrent ? 'text-indigo-700 font-semibold' : 'text-gray-400'}`}>
+                          {label}
+                        </span>
+                      </div>
+                      {stepNum < 5 && (
+                        <div className={`flex-1 h-0.5 mx-1 sm:mx-2 ${isDone ? 'bg-indigo-300' : 'bg-gray-200'}`} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {step === 1 && (
             <div className="space-y-4 sm:space-y-6">
               <div>
-                <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
+                <label htmlFor="numPlayers" className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
                   Liczba zawodników
                 </label>
                 <input
+                  id="numPlayers"
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -933,10 +981,11 @@ export default function TournamentGenerator() {
               </div>
 
               <div>
-                <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
+                <label htmlFor="numFields" className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
                   Liczba boisk
                 </label>
                 <input
+                  id="numFields"
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -955,10 +1004,11 @@ export default function TournamentGenerator() {
               </div>
 
               <div>
-                <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
+                <label htmlFor="playersPerTeam" className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
                   Zawodników na drużynę
                 </label>
                 <input
+                  id="playersPerTeam"
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -977,13 +1027,14 @@ export default function TournamentGenerator() {
               </div>
 
               <div>
-                <label className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
+                <label htmlFor="numRounds" className="block text-sm sm:text-base font-medium text-gray-700 mb-2">
                   Liczba rund
                   <span className="block sm:inline sm:ml-2 text-xs sm:text-sm text-indigo-600 font-normal mt-1 sm:mt-0">
                     (Sugerowane: {suggestedRounds} - aby każdy zagrał taką samą liczbę meczy)
                   </span>
                 </label>
                 <input
+                  id="numRounds"
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"

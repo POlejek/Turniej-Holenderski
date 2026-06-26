@@ -160,6 +160,24 @@ function testFileContents() {
       !content.includes('disabled={team.withdrawn}') || content.includes('always enabled'),
       'Pola mogą być zablokowane dla wycofanych drużyn'
     );
+
+    testResult(
+      'GroupTournament (Szwajcarski): Tiebreak Buchholz',
+      content.includes('buchholz'),
+      'Brak tiebreaku Buchholz w tabeli Swiss'
+    );
+
+    testResult(
+      'GroupTournament (Szwajcarski): Bezstronne losowanie I rundy',
+      content.includes('shuffle(') && !content.includes('Math.random() - 0.5'),
+      'Pierwsza runda używa tendencyjnego sortowania losowego'
+    );
+
+    testResult(
+      'GroupTournament (Szwajcarski): Bye dla najsłabszej drużyny',
+      content.includes('byeCandidates') && content.includes('swissPoints || 0) - (b.swissPoints || 0'),
+      'Bye nie jest przydzielane wg pozycji w tabeli'
+    );
   }
 
   // Test 3: TournamentScheduler.jsx - sortowanie
