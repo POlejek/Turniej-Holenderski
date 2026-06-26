@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Users, Grid, Trophy } from 'lucide-react';
 import TournamentScheduler from './TournamentScheduler';
 import GroupTournament from './GroupTournament';

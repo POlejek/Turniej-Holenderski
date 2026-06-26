@@ -1,27 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Trophy, Download } from 'lucide-react';
+import { loadState, saveState } from './utils/storage';
 
 // Local storage key for persistence
 const STORAGE_KEY = 'team_tournament_state_v1';
-
-const loadStateFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) {
-    console.warn('Failed to load state from storage', e);
-    return null;
-  }
-};
-
-const saveStateToStorage = (state) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn('Failed to save state to storage', e);
-  }
-};
 
 export default function TournamentScheduler() {
   const [step, setStep] = useState(1);
@@ -39,7 +21,7 @@ export default function TournamentScheduler() {
 
   // Load persisted state on mount
   useEffect(() => {
-    const saved = loadStateFromStorage();
+    const saved = loadState(STORAGE_KEY);
     if (saved) {
       if (typeof saved.step === 'number') setStep(saved.step);
       if (typeof saved.numTeams === 'string') setNumTeams(saved.numTeams);
@@ -68,7 +50,7 @@ export default function TournamentScheduler() {
         results,
         showStandings
       };
-      saveStateToStorage(stateToSave);
+      saveState(STORAGE_KEY, stateToSave);
     }, 500);
 
     return () => {
@@ -240,7 +222,7 @@ export default function TournamentScheduler() {
 
       allMatches.push(roundMatches);
 
-      const fixed = teamList[0];
+      // System Bergera: drużyna na pozycji 0 jest stała, reszta rotuje
       const rotating = teamList.slice(1);
       rotating.unshift(rotating.pop());
       teamList.splice(1, rotating.length, ...rotating);
@@ -618,7 +600,7 @@ export default function TournamentScheduler() {
 
         allMatches.push(roundMatches);
 
-        const fixed = teamList[0];
+        // System Bergera: drużyna na pozycji 0 jest stała, reszta rotuje
         const rotating = teamList.slice(1);
         rotating.unshift(rotating.pop());
         teamList.splice(1, rotating.length, ...rotating);

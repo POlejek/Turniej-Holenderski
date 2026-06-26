@@ -1,26 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { loadState, saveState } from './utils/storage';
+import { shuffle } from './utils/shuffle';
 
 // Local storage key for persistence
 const STORAGE_KEY = 'tournament_state_v1';
-
-const loadStateFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) {
-    console.warn('Failed to load state from storage', e);
-    return null;
-  }
-};
-
-const saveStateToStorage = (state) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn('Failed to save state to storage', e);
-  }
-};
 
 // Simplified logo and small inline icons (use emoji/text for lightweight UI)
 const Logo = ({ className = '' }) => (
@@ -63,7 +46,6 @@ export default function TournamentGenerator() {
   const [pasteInput, setPasteInput] = useState('');
 
   // Edit tournament state
-  const [numPlayersToAdd, setNumPlayersToAdd] = useState(1);
   const [numPlayersToAddInput, setNumPlayersToAddInput] = useState('1');
   const [newPlayerNames, setNewPlayerNames] = useState(['']);
   const [playersToRemove, setPlayersToRemove] = useState(new Set());
@@ -80,7 +62,7 @@ export default function TournamentGenerator() {
 
   // Load persisted state on mount
   useEffect(() => {
-    const saved = loadStateFromStorage();
+    const saved = loadState(STORAGE_KEY);
     if (saved) {
       if (typeof saved.step === 'number') setStep(saved.step);
       if (typeof saved.numPlayers === 'number') setNumPlayers(saved.numPlayers);
@@ -120,7 +102,7 @@ export default function TournamentGenerator() {
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      saveStateToStorage(stateToSave());
+      saveState(STORAGE_KEY, stateToSave());
       saveTimeoutRef.current = null;
     }, 500);
 
@@ -175,10 +157,12 @@ export default function TournamentGenerator() {
         if (numRoundsInput === '') setNumRounds(suggestions.length > 0 ? suggestions[0] : 1);
       }
     }
+  // Celowo zależymy tylko od wartości pól wejściowych — przeliczamy sugestię
+  // rund dopiero gdy użytkownik zmienia wpisywane liczby.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numPlayersInput, playersPerTeamInput, numFieldsInput]);
 
-  const initializePlayers = () => {
-    const count = arguments.length > 0 && typeof arguments[0] === 'number' ? arguments[0] : numPlayers;
+  const initializePlayers = (count = numPlayers) => {
     const names = Array(count).fill('').map((_, i) => `Zawodnik ${i + 1}`);
     setPlayerNames(names);
   };
@@ -190,6 +174,7 @@ export default function TournamentGenerator() {
         initializePlayers(numPlayers);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, numPlayers]);
 
   const updatePlayerName = (index, name) => {
@@ -260,15 +245,6 @@ export default function TournamentGenerator() {
     setPasteInput('');
   };
 
-  const shuffle = (array) => {
-    const newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
-  };
-
   const getEditedPlayerCount = () => {
     const trimmedNew = newPlayerNames.filter(n => n.trim() !== '');
     const remainingCount = playerNames.filter(n => !playersToRemove.has(n)).length;
@@ -290,11 +266,6 @@ export default function TournamentGenerator() {
   const getSuggestedRoundsKeepPlayed = () => {
     const lastPlayed = getLastFullyPlayedRound();
     return Math.max(lastPlayed + 1, getSuggestedRoundsFresh());
-  };
-
-  const generateAdditionalMatches = (newNamesArg, additionalRounds) => {
-    const namesArray = Array.isArray(newNamesArg) ? newNamesArg : [newNamesArg];
-    return generateMatchesCore([...playerNames, ...namesArray], additionalRounds, numRounds + 1, matches);
   };
 
   // Core scheduling engine: generates rounds starting at startRound,
@@ -477,7 +448,6 @@ export default function TournamentGenerator() {
   };
 
   const resetEditState = () => {
-    setNumPlayersToAdd(1);
     setNumPlayersToAddInput('1');
     setNewPlayerNames(['']);
     setPlayersToRemove(new Set());
@@ -485,7 +455,6 @@ export default function TournamentGenerator() {
   };
 
   const openEditTournament = (fromStep) => {
-    setNumPlayersToAdd(1);
     setNumPlayersToAddInput('1');
     setNewPlayerNames(['']);
     setPlayersToRemove(new Set());
@@ -584,7 +553,6 @@ export default function TournamentGenerator() {
 
     const playersPerMatch = playersPerTeam * 2;
     const totalSlots = numRounds * numFields * playersPerMatch;
-    const matchesPerPlayer = totalSlots / numPlayers;
 
     // Desired matches per player (distribute remainder among first players)
     const baseMatches = Math.floor(totalSlots / numPlayers);
@@ -918,49 +886,9 @@ export default function TournamentGenerator() {
     setPointsDraw(5);
     setPointsLoss(0);
     setPointsPerGoal(1);
-
-    // Odśwież stronę, aby zapewnić pełne wyczyszczenie stanu UI
-    window.location.reload();
-  };
-
-  const handleNewTournament = () => {
-    const confirmNewTournament = window.confirm("Czy na pewno chcesz rozpocząć nowy turniej? Wszystkie dane zostaną utracone.");
-    if (confirmNewTournament) {
-      setStep(1);
-      setNumPlayers(8);
-      setNumFields(2);
-      setPlayersPerTeam(2);
-      setNumRounds(0);
-      setPlayerNames([]);
-      setMatches([]);
-      setResults({});
-      setFinalStandings([]);
-      setReturnStep(null);
-      setPointsWin(10);
-      setPointsDraw(5);
-      setPointsLoss(0);
-      setPointsPerGoal(1);
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  };
-
-  const calculateRounds = () => {
-    const rounds = [];
-    for (let i = 0; i < numRounds; i++) {
-      rounds.push([]);
-    }
-
-    for (let i = 0; i < numPlayers; i++) {
-      const roundIndex = i % numRounds;
-      rounds[roundIndex].push(`Zawodnik ${i + 1}`);
-    }
-
-    return rounds;
-  };
-
-  const handleStartTournament = () => {
-    const rounds = calculateRounds();
-    setMatches(rounds);
+    setShowPasteMode(false);
+    setPasteInput('');
+    resetEditState();
   };
 
   return (
@@ -1286,7 +1214,7 @@ export default function TournamentGenerator() {
                 <p><strong>Boisk:</strong> {numFields}</p>
                 <p><strong>Zawodników na drużynę:</strong> {playersPerTeam}</p>
                 <p><strong>Rund:</strong> {numRounds}</p>
-                <p><strong>Łącznie meczy:</strong> {numRounds * numFields}</p>
+                <p><strong>Łącznie meczy (planowane):</strong> {numRounds * numFields}</p>
                 <div className="border-t pt-2 mt-3">
                   <p className="font-semibold mb-1">Punktacja:</p>
                   <p className="text-xs sm:text-sm">Wygrana: {pointsWin} pkt | Remis: {pointsDraw} pkt | Przegrana: {pointsLoss} pkt | Bramka: {pointsPerGoal} pkt</p>
@@ -1687,7 +1615,6 @@ export default function TournamentGenerator() {
                     setNumPlayersToAddInput(val);
                     const parsed = parseInt(val);
                     if (!isNaN(parsed) && parsed >= 1 && parsed <= 20) {
-                      setNumPlayersToAdd(parsed);
                       setNewPlayerNames(prev => {
                         const updated = [...prev];
                         while (updated.length < parsed) updated.push('');

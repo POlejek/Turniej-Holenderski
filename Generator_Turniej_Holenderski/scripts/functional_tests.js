@@ -69,7 +69,7 @@ function testFileStructure() {
     'src/Turniej_Holenderski.jsx',
     'index.html',
     'package.json',
-    'vite.config.ts',
+    'vite.config.js',
   ];
 
   requiredFiles.forEach(file => {
@@ -97,7 +97,7 @@ function testFileContents() {
 
     testResult(
       'GroupStageTournament: Losowanie grup',
-      content.includes('startTournamentWithTeams') && content.includes('Math.random()'),
+      content.includes('startTournamentWithTeams') && content.includes('shuffle('),
       'Brak funkcji losowania grup'
     );
 
@@ -133,7 +133,7 @@ function testFileContents() {
 
     testResult(
       'GroupStageTournament: Auto-save z teamNamesInput',
-      content.includes('teamNamesInput') && content.includes('localStorage.setItem'),
+      content.includes('teamNamesInput') && content.includes('saveState('),
       'Brak auto-zapisu nazw drużyn'
     );
   }

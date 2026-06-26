@@ -1,5 +1,4 @@
-import React from 'react';
-import { ArrowLeft, Users, Trophy, Calendar, Edit3, Download, RotateCcw, Play, CheckCircle, Clipboard, Settings } from 'lucide-react';
+import { ArrowLeft, Users, Trophy, Calendar, Edit3, Download, Play, Clipboard, Settings } from 'lucide-react';
 
 const InstrukcjaObslugi = ({ onBack }) => {
   return (

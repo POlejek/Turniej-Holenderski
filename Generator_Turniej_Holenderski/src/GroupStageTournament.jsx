@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Save, Upload, Download, Users, Award, ArrowRight, RotateCcw, Edit2, Trash2, Trophy } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download, Users, Award, ArrowRight, RotateCcw, Edit2, Trophy } from 'lucide-react';
+import { saveState } from './utils/storage';
+import { shuffle } from './utils/shuffle';
 
 export default function GroupStageTournament() {
   const STORAGE_KEY = 'group_stage_tournament_v2';
@@ -46,7 +48,7 @@ export default function GroupStageTournament() {
         pointsWin, pointsDraw, matchesPerPair, teamNamesInput, teams, qualifyingGroups, qualifyingMatches, qualifyingResults,
         tier1GroupsData, tier1Matches, tier1Results, tier2GroupsData, tier2Matches, tier2Results, currentTier
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      saveState(STORAGE_KEY, state);
     }, 500);
     return () => clearTimeout(saveTimer);
   }, [step, numQualGroups, teamsPerQualGroup, tier1Groups, tier1TeamsPerGroup, tier2Groups,
@@ -166,7 +168,7 @@ export default function GroupStageTournament() {
     }
 
     // Losowe przydzielenie drużyn do grup
-    const shuffledNames = [...names].sort(() => Math.random() - 0.5);
+    const shuffledNames = shuffle(names);
 
     const newTeams = shuffledNames.slice(0, totalTeams).map((name, i) => ({
       id: i + 1,
@@ -488,7 +490,7 @@ export default function GroupStageTournament() {
     const ranking = [];
 
     // Najpierw wszystkie drużyny z I Ligi
-    tier1GroupsData.forEach((group, groupIndex) => {
+    tier1GroupsData.forEach((group) => {
       const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
       sorted.forEach((teamId, position) => {
         const team = teams.find(t => t.id === teamId);
@@ -505,7 +507,7 @@ export default function GroupStageTournament() {
     });
 
     // Potem wszystkie drużyny z II Ligi
-    tier2GroupsData.forEach((group, groupIndex) => {
+    tier2GroupsData.forEach((group) => {
       const sorted = sortGroupTeams(group.teams, 'tier2', group.id);
       sorted.forEach((teamId, position) => {
         const team = teams.find(t => t.id === teamId);
@@ -592,54 +594,6 @@ export default function GroupStageTournament() {
     link.href = URL.createObjectURL(blob);
     link.download = 'turniej_grupowy.csv';
     link.click();
-  };
-
-  // Generowanie klasyfikacji końcowej
-  const getFinalRanking = () => {
-    const ranking = [];
-
-    // Najpierw I Liga - sortowana według grup
-    tier1GroupsData.forEach(group => {
-      const sorted = sortGroupTeams(group.teams, 'tier1', group.id);
-      sorted.forEach((teamId, position) => {
-        const team = teams.find(t => t.id === teamId);
-        ranking.push({ ...team, tier: 1, groupPosition: position + 1, groupName: group.name });
-      });
-    });
-
-    // Potem II Liga - sortowana według grup
-    tier2GroupsData.forEach(group => {
-      const sorted = sortGroupTeams(group.teams, 'tier2', group.id);
-      sorted.forEach((teamId, position) => {
-        const team = teams.find(t => t.id === teamId);
-        ranking.push({ ...team, tier: 2, groupPosition: position + 1, groupName: group.name });
-      });
-    });
-
-    // Sortowanie międzygrupowe w obrębie każdej ligi
-    const tier1Teams = ranking.filter(t => t.tier === 1).sort((a, b) => {
-      // Najpierw według pozycji w grupie (1. miejsca, potem 2. miejsca itd.)
-      if (a.groupPosition !== b.groupPosition) return a.groupPosition - b.groupPosition;
-      // Przy równej pozycji - według punktów
-      if (b.finalPoints !== a.finalPoints) return b.finalPoints - a.finalPoints;
-      // Potem bilans
-      const aDiff = a.finalGoalsFor - a.finalGoalsAgainst;
-      const bDiff = b.finalGoalsFor - b.finalGoalsAgainst;
-      if (bDiff !== aDiff) return bDiff - aDiff;
-      // Na końcu bramki strzelone
-      return b.finalGoalsFor - a.finalGoalsFor;
-    });
-
-    const tier2Teams = ranking.filter(t => t.tier === 2).sort((a, b) => {
-      if (a.groupPosition !== b.groupPosition) return a.groupPosition - b.groupPosition;
-      if (b.finalPoints !== a.finalPoints) return b.finalPoints - a.finalPoints;
-      const aDiff = a.finalGoalsFor - a.finalGoalsAgainst;
-      const bDiff = b.finalGoalsFor - b.finalGoalsAgainst;
-      if (bDiff !== aDiff) return bDiff - aDiff;
-      return b.finalGoalsFor - a.finalGoalsFor;
-    });
-
-    return [...tier1Teams, ...tier2Teams];
   };
 
   const renderGroupTable = (groupTeams, phase, groupId) => {

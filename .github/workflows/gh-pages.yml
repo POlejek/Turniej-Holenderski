@@ -29,6 +29,14 @@ jobs:
         run: npm ci
         working-directory: ./Generator_Turniej_Holenderski
 
+      - name: Lint
+        run: npm run lint
+        working-directory: ./Generator_Turniej_Holenderski
+
+      - name: Test
+        run: npm test
+        working-directory: ./Generator_Turniej_Holenderski
+
       - name: Build
         run: npm run build
         working-directory: ./Generator_Turniej_Holenderski

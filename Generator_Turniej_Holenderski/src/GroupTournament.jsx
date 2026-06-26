@@ -1,26 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2, Trophy, Download, ArrowLeft, ArrowRight, Users, RefreshCw } from 'lucide-react';
+import { loadState, saveState } from './utils/storage';
 
 const STORAGE_KEY = 'swiss_tournament_state_v1';
-
-const loadStateFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) {
-    console.warn('Failed to load state from storage', e);
-    return null;
-  }
-};
-
-const saveStateToStorage = (state) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn('Failed to save state to storage', e);
-  }
-};
 
 export default function GroupTournament() {
   // Stan kroków
@@ -59,7 +41,7 @@ export default function GroupTournament() {
 
   // Wczytaj stan z localStorage
   useEffect(() => {
-    const saved = loadStateFromStorage();
+    const saved = loadState(STORAGE_KEY);
     if (saved) {
       if (typeof saved.step === 'number') setStep(saved.step);
       if (typeof saved.numTeams === 'string') setNumTeams(saved.numTeams);
@@ -100,7 +82,7 @@ export default function GroupTournament() {
         playoffResults,
         finalRanking
       };
-      saveStateToStorage(stateToSave);
+      saveState(STORAGE_KEY, stateToSave);
     }, 500);
 
     return () => {
@@ -1051,7 +1033,6 @@ export default function GroupTournament() {
     ranking.push({ teamId: runnerUpId, place: 2 });
     
     // Kolejne miejsca z playoff (półfinaliści itd.)
-    const topN = parseInt(playoffTopN);
     let currentPlace = 3;
     for (let round = playoffBracket.length - 2; round >= 0; round--) {
       const losers = playoffBracket[round]

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Shuffle, Users, BookOpen } from 'lucide-react';
 import TurniejHolenderski from './Turniej_Holenderski';
 import TeamTournamentMenu from './TeamTournamentMenu';
