@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Generator Turniejów — nowy adres</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; background: #f8fafc; color: #111827; }
+    main { max-width: 32rem; padding: 2rem; text-align: center; }
+    a { color: #3730a3; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Generator Turniejów ma nowy adres</h1>
+    <p id="msg">Przenoszę Twoje turnieje…</p>
+    <p><a id="link" href="#">Przejdź do aplikacji</a></p>
+  </main>
+  <script>
+    // >>> USTAW NOWY ADRES APLIKACJI (z ukośnikiem na końcu) <<<
+    var NEW_URL = 'https://turniej-holenderski.pages.dev/';
+
+    // Turnieje są zapisane w przeglądarce pod starym adresem — przenosimy je
+    // w linku (skompresowane, bez serwera). Linki podglądu dla zawodników
+    // przekierowujemy bez zmian.
+    var MODULES = {
+      dutch: 'tournament_state_v1',
+      'round-robin': 'team_tournament_state_v1',
+      swiss: 'swiss_tournament_state_v1',
+      'group-stage': 'group_stage_tournament_v2'
+    };
+    document.getElementById('link').href = NEW_URL;
+
+    function read(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } }
+
+    function toBase64Url(bytes) {
+      var bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    async function compress(obj) {
+      var stream = new Blob([new TextEncoder().encode(JSON.stringify(obj))]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      return toBase64Url(new Uint8Array(await new Response(stream).arrayBuffer()));
+    }
+
+    async function cleanupOldApp() {
+      try {
+        if ('serviceWorker' in navigator) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }
+        if (window.caches) {
+          var keys = await caches.keys();
+          await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }
+      } catch (e) { /* bez znaczenia dla przekierowania */ }
+    }
+
+    (async function () {
+      await cleanupOldApp();
+      var hash = location.hash || '';
+      if (hash.indexOf('#/podglad/') === 0) { location.replace(NEW_URL + hash); return; }
+      var active = {};
+      Object.keys(MODULES).forEach(function (m) { var s = read(MODULES[m]); if (s) active[m] = s; });
+      var history = read('tournaments_history_v1') || [];
+      if (!Object.keys(active).length && !history.length) { location.replace(NEW_URL); return; }
+      try {
+        var data = {
+          app: 'generator-turniejow', version: 1, exportedAt: new Date().toISOString(),
+          active: active, meta: read('tournaments_meta_v1') || {}, history: history,
+          consent: localStorage.getItem('analytics_consent_v1')
+        };
+        localStorage.setItem('migrated_to', NEW_URL);
+        location.replace(NEW_URL + '#/przeniesienie/' + await compress(data));
+      } catch (e) {
+        document.getElementById('msg').textContent = 'Nie udało się przenieść turniejów automatycznie. Otwórz aplikację pod nowym adresem i wczytaj kopię zapasową.';
+      }
+    })();
+  </script>
+</body>
+</html>
